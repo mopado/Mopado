@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mopado Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #FFF5EB;
+            color: #2C3E50;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: #FF8C42;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 32px;
+            margin-bottom: 5px;
+        }
+
+        header p {
+            opacity: 0.9;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h3 {
+            font-size: 14px;
+            color: #7F8C8D;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #FF8C42;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #E0E0E0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            color: #7F8C8D;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #FF8C42;
+            border-bottom-color: #FF8C42;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .card h2 {
+            margin-bottom: 20px;
+            color: #2C3E50;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2C3E50;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #E0E0E0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #FF8C42;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #E67835;
+        }
+
+        .btn-danger {
+            background: #E74C3C;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #C0392B;
+        }
+
+        .btn-secondary {
+            background: #95A5A6;
+            color: white;
+        }
+
+        .list-item {
+            background: white;
+            border: 1px solid #E0E0E0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .list-item-info h3 {
+            margin-bottom: 4px;
+            color: #2C3E50;
+        }
+
+        .list-item-info p {
+            color: #7F8C8D;
+            font-size: 14px;
+        }
+
+        .list-item-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .list-item-actions button {
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #5DADE2;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .file-input-label:hover {
+            background: #3498DB;
+        }
+
+        .file-name {
+            margin-left: 12px;
+            color: #7F8C8D;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 Mopado Admin</h1>
+            <p>Interface de gestion des saisons et épisodes</p>
+        </header>
+
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <h3>Familles</h3>
+                <div class="value" id="stat-families">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Saisons</h3>
+                <div class="value" id="stat-seasons">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Épisodes</h3>
+                <div class="value" id="stat-episodes">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Sessions complétées</h3>
+                <div class="value" id="stat-sessions">0</div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('seasons')">Saisons</button>
+            <button class="tab" onclick="switchTab('episodes')">Épisodes</button>
+        </div>
+
+        <!-- Seasons Tab -->
+        <div id="seasons-tab" class="tab-content active">
+            <div class="card">
+                <h2>Créer une saison</h2>
+                <div id="season-alert"></div>
+                <form id="season-form">
+                    <div class="form-group">
+                        <label>Nom *</label>
+                        <input type="text" id="season-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Description *</label>
+                        <textarea id="season-description" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Ordre *</label>
+                        <input type="number" id="season-order" value="1" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Créer la saison</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Saisons existantes</h2>
+                <div id="seasons-list"></div>
+            </div>
+        </div>
+
+        <!-- Episodes Tab -->
+        <div id="episodes-tab" class="tab-content">
+            <div class="card">
+                <h2>Créer un épisode</h2>
+                <div id="episode-alert"></div>
+                <form id="episode-form">
+                    <div class="form-group">
+                        <label>Saison *</label>
+                        <select id="episode-season" required>
+                            <option value="">Sélectionnez une saison</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Titre *</label>
+                        <input type="text" id="episode-title" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Description *</label>
+                        <textarea id="episode-description" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Ordre *</label>
+                        <input type="number" id="episode-order" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Vidéo (optionnel)</label>
+                        <div class="file-input-wrapper">
+                            <label class="file-input-label" for="episode-video">Choisir une vidéo</label>
+                            <input type="file" id="episode-video" accept="video/*">
+                            <span class="file-name" id="video-file-name">Aucun fichier choisi</span>
+                        </div>
+                        <p style="color: #7F8C8D; font-size: 12px; margin-top: 8px;">Format: MP4, max 50MB</p>
+                    </div>
+                    <div class="form-group">
+                        <label>Cartes d'échange (une par ligne)</label>
+                        <textarea id="episode-cards" placeholder="Quelle est une idée que tu retiens de la vidéo ?
+Qu'as-tu aimé dans ce moment ?"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Mini-jeu - Nom</label>
+                        <input type="text" id="episode-game-name" placeholder="Ex: C'est quali">
+                    </div>
+                    <div class="form-group">
+                        <label>Mini-jeu - Instructions</label>
+                        <textarea id="episode-game-instructions" placeholder="4 lettres sont tirées. Chaque participant doit trouver une qualité pour un autre membre de la famille commençant par l'une des lettres tirées."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Récompense Mopado$ *</label>
+                        <input type="number" id="episode-reward" value="5" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Créer l'épisode</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Épisodes existants</h2>
+                <div class="form-group">
+                    <label>Filtrer par saison</label>
+                    <select id="filter-season" onchange="filterEpisodes()">
+                        <option value="">Toutes les saisons</option>
+                    </select>
+                </div>
+                <div id="episodes-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin + '/api';
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            if (tabName === 'episodes') {
+                loadSeasonsForSelect();
+            }
+        }
+
+        // Load stats
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_URL}/admin/stats`);
+                const stats = await response.json();
+                
+                document.getElementById('stat-families').textContent = stats.total_families;
+                document.getElementById('stat-seasons').textContent = stats.total_seasons;
+                document.getElementById('stat-episodes').textContent = stats.total_episodes;
+                document.getElementById('stat-sessions').textContent = stats.total_completed_sessions;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Seasons
+        async function loadSeasons() {
+            try {
+                const response = await fetch(`${API_URL}/seasons`);
+                const seasons = await response.json();
+                
+                const list = document.getElementById('seasons-list');
+                if (seasons.length === 0) {
+                    list.innerHTML = '<p style="color: #7F8C8D;">Aucune saison créée</p>';
+                    return;
+                }
+                
+                list.innerHTML = seasons.map(season => `
+                    <div class="list-item">
+                        <div class="list-item-info">
+                            <h3>${season.name}</h3>
+                            <p>${season.description}</p>
+                            <p style="font-size: 12px; margin-top: 4px;">Ordre: ${season.order}</p>
+                        </div>
+                        <div class="list-item-actions">
+                            <button class="btn btn-danger" onclick="deleteSeason('${season.id}')">Supprimer</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading seasons:', error);
+            }
+        }
+
+        document.getElementById('season-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const data = {
+                name: document.getElementById('season-name').value,
+                description: document.getElementById('season-description').value,
+                order: parseInt(document.getElementById('season-order').value)
+            };
+            
+            try {
+                const response = await fetch(`${API_URL}/seasons`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showAlert('season-alert', 'Saison créée avec succès !', 'success');
+                    document.getElementById('season-form').reset();
+                    loadSeasons();
+                    loadStats();
+                } else {
+                    showAlert('season-alert', 'Erreur lors de la création', 'error');
+                }
+            } catch (error) {
+                showAlert('season-alert', 'Erreur: ' + error.message, 'error');
+            }
+        });
+
+        async function deleteSeason(id) {
+            if (!confirm('Êtes-vous sûr de vouloir supprimer cette saison et tous ses épisodes ?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/seasons/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    loadSeasons();
+                    loadStats();
+                }
+            } catch (error) {
+                console.error('Error deleting season:', error);
+            }
+        }
+
+        // Episodes
+        async function loadSeasonsForSelect() {
+            try {
+                const response = await fetch(`${API_URL}/seasons`);
+                const seasons = await response.json();
+                
+                const select = document.getElementById('episode-season');
+                const filterSelect = document.getElementById('filter-season');
+                
+                select.innerHTML = '<option value="">Sélectionnez une saison</option>' +
+                    seasons.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+                
+                filterSelect.innerHTML = '<option value="">Toutes les saisons</option>' +
+                    seasons.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            } catch (error) {
+                console.error('Error loading seasons for select:', error);
+            }
+        }
+
+        document.getElementById('episode-video').addEventListener('change', (e) => {
+            const fileName = e.target.files[0]?.name || 'Aucun fichier choisi';
+            document.getElementById('video-file-name').textContent = fileName;
+        });
+
+        document.getElementById('episode-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const videoFile = document.getElementById('episode-video').files[0];
+            let videoBase64 = null;
+            
+            if (videoFile) {
+                if (videoFile.size > 50 * 1024 * 1024) {
+                    showAlert('episode-alert', 'La vidéo est trop grande (max 50MB)', 'error');
+                    return;
+                }
+                videoBase64 = await fileToBase64(videoFile);
+            }
+            
+            const cardsText = document.getElementById('episode-cards').value;
+            const cards = cardsText.split('\n').filter(line => line.trim()).map(content => ({
+                type: 'question',
+                content: content.trim()
+            }));
+            
+            const gameName = document.getElementById('episode-game-name').value;
+            const gameInstructions = document.getElementById('episode-game-instructions').value;
+            const miniGame = (gameName && gameInstructions) ? {
+                name: gameName,
+                instructions: gameInstructions,
+                data: {}
+            } : null;
+            
+            const data = {
+                season_id: document.getElementById('episode-season').value,
+                title: document.getElementById('episode-title').value,
+                description: document.getElementById('episode-description').value,
+                order: parseInt(document.getElementById('episode-order').value),
+                video_base64: videoBase64,
+                cards: cards,
+                mini_game: miniGame,
+                mopado_reward: parseInt(document.getElementById('episode-reward').value)
+            };
+            
+            try {
+                const response = await fetch(`${API_URL}/episodes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showAlert('episode-alert', 'Épisode créé avec succès !', 'success');
+                    document.getElementById('episode-form').reset();
+                    document.getElementById('video-file-name').textContent = 'Aucun fichier choisi';
+                    loadEpisodes();
+                    loadStats();
+                } else {
+                    showAlert('episode-alert', 'Erreur lors de la création', 'error');
+                }
+            } catch (error) {
+                showAlert('episode-alert', 'Erreur: ' + error.message, 'error');
+            }
+        });
+
+        async function loadEpisodes() {
+            const seasonFilter = document.getElementById('filter-season')?.value;
+            
+            try {
+                const response = await fetch(`${API_URL}/seasons`);
+                const seasons = await response.json();
+                
+                let allEpisodes = [];
+                
+                for (const season of seasons) {
+                    if (seasonFilter && season.id !== seasonFilter) continue;
+                    
+                    const episodesResponse = await fetch(`${API_URL}/episodes/season/${season.id}`);
+                    const episodes = await episodesResponse.json();
+                    
+                    allEpisodes.push(...episodes.map(ep => ({ ...ep, season_name: season.name })));
+                }
+                
+                const list = document.getElementById('episodes-list');
+                if (allEpisodes.length === 0) {
+                    list.innerHTML = '<p style="color: #7F8C8D;">Aucun épisode créé</p>';
+                    return;
+                }
+                
+                list.innerHTML = allEpisodes.map(episode => `
+                    <div class="list-item">
+                        <div class="list-item-info">
+                            <h3>${episode.title}</h3>
+                            <p>${episode.description}</p>
+                            <p style="font-size: 12px; margin-top: 4px;">
+                                Saison: ${episode.season_name} | Ordre: ${episode.order} | 
+                                ${episode.cards.length} cartes | Récompense: ${episode.mopado_reward} Mopado$
+                            </p>
+                        </div>
+                        <div class="list-item-actions">
+                            <button class="btn btn-danger" onclick="deleteEpisode('${episode.id}')">Supprimer</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading episodes:', error);
+            }
+        }
+
+        async function deleteEpisode(id) {
+            if (!confirm('Êtes-vous sûr de vouloir supprimer cet épisode ?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/episodes/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    loadEpisodes();
+                    loadStats();
+                }
+            } catch (error) {
+                console.error('Error deleting episode:', error);
+            }
+        }
+
+        function filterEpisodes() {
+            loadEpisodes();
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        function showAlert(elementId, message, type) {
+            const alertDiv = document.getElementById(elementId);
+            alertDiv.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => {
+                alertDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        // Initial load
+        loadStats();
+        loadSeasons();
+        loadSeasonsForSelect();
+        loadEpisodes();
+    </script>
+</body>
+</html>
