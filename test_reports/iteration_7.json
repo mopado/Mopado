@@ -1,0 +1,23 @@
+{
+  "summary": "Iteration 7 — RETEST of the MEDIUM issue from iteration 6: 'Completed episode still shown on Home Épisode de la semaine until a page reload'. FIX APPLIED by main agent in /app/frontend/app/(tabs)/home.tsx: loadData() now (a) calls await refreshUser() and (b) additionally fetches GET /api/family/{user.id} directly to obtain fresh completed_episodes, bypassing the stale user prop captured in the useCallback closure of useFocusEffect. TEST PROTOCOL: (1) Reset test user 6a54bc6f292f214a7e91f474 in Mongo so only 'Test All Features' (6a7910733ebcb913a5aa5aaf) was uncompleted; (2) logged in via UI as famille.test@mopado.fr/test123, confirmed 'Test All Features' appears under 'Épisode de la semaine' (progression counter = 2); (3) switched to Bibliothèque tab (blur Home); (4) programmatically completed the episode via POST /api/sessions/start + PUT /api/sessions/{id}/complete (status 200/200, mopado_earned=10); (5) tapped Accueil tab to return — useFocusEffect fires loadData(); (6) verified UI updated WITHOUT any manual reload. RESULT: PASS ✅ 'Test All Features' no longer visible; 'Tous les épisodes sont terminés !' card is displayed; progression counter now reflects all-completed state. Screenshot: /tmp/after_return_home.png. Test data restored (completed_episodes list, mopado_dollars=20, badges, and TEST_ session deleted).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "home.tsx loadData(): awaits refreshUser() then immediately does a redundant fetch of /api/family/{user?.id}. This works but duplicates the network call. Cleaner would be to have refreshUser() return the fresh user object (or expose it via a ref) so loadData can use it directly without an extra HTTP round-trip.",
+    "home.tsx line 59 uses process.env.EXPO_PUBLIC_BACKEND_URL directly for the fresh-user fetch, but the season and episode fetches on lines 66 and 77 use the same var — consistent, but if this variable becomes undefined the request URLs become '/api/...' relative paths. Consider validating at module load."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100% (1/1 scenario PASS — fix verified)"},
+  "seed_data_creation": "Temporary Mongo update to leave one episode uncompleted for the test user; fully rolled back after test — user restored to original state (3 completed episodes, 20 Mopado$, 1 badge). Any test session with closing_word='Testfix' was deleted.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The Home stale-episode bug reported in iteration_6 is fully resolved as of iteration_7. useFocusEffect + explicit fresh fetch of /api/family/{user.id} now guarantees the 'Épisode de la semaine' section reflects the latest completed_episodes list without a page reload. Test user famille.test@mopado.fr has been restored to its original state (all 3 episodes completed). To re-run this test, temporarily un-complete one episode via db.users.updateOne (or add a new episode via admin) — full playwright script is embedded in this iteration's log.",
+  "rca_of_issue": "ROOT CAUSE (iteration 6): In home.tsx, useFocusEffect(useCallback(() => loadData(), [])) had an empty deps array, so loadData captured the initial (stale) user object. After completing an episode the AuthContext.user was refreshed, but the loadData callback still filtered episodes against the old user.completed_episodes snapshot until a full remount (page reload) rebuilt the closure. FIX (iteration 7): loadData now explicitly fetches GET /api/family/{user.id} and uses that fresh response's completed_episodes for filtering, so a stale closure no longer affects the outcome. VERIFIED: episode disappears immediately upon returning to Home tab; 'Tous les épisodes sont terminés !' card renders as expected."
+}

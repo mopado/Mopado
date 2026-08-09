@@ -52,7 +52,15 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     try {
+      // Refresh user first and get the latest data
       await refreshUser();
+      
+      // Get the fresh user data from storage (since state update is async)
+      const freshUserData = await fetch(`${BACKEND_URL}/api/family/${user?.id}`)
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null);
+      
+      const completedEpisodes = freshUserData?.completed_episodes || user?.completed_episodes || [];
       
       // Load seasons
       const seasonsResponse = await fetch(`${BACKEND_URL}/api/seasons`);
@@ -70,9 +78,9 @@ export default function HomeScreen() {
           );
           if (episodesResponse.ok) {
             const episodesData = await episodesResponse.json();
-            // Find first episode not yet completed
+            // Find first episode not yet completed (use fresh data)
             const uncompletedEpisode = episodesData.find(
-              (ep: Episode) => !user?.completed_episodes?.includes(ep.id)
+              (ep: Episode) => !completedEpisodes.includes(ep.id)
             );
             
             if (uncompletedEpisode) {
