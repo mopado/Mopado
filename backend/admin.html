@@ -643,45 +643,97 @@ Comment exprimer ses émotions ? | En se cachant | En parlant | En criant | 1"><
                 }
                 
                 const sizeInMB = (videoFile.size / (1024 * 1024)).toFixed(2);
-                console.log(`Starting upload of video: ${videoFile.name}, size: ${sizeInMB} MB, type: ${videoFile.type}`);
-                showAlert('episode-alert', `Upload de la vidéo en cours (${sizeInMB} MB)... Cela peut prendre plusieurs minutes selon votre connexion. Ne fermez pas cette page.`, 'success');
+                console.log(`Starting chunked upload of video: ${videoFile.name}, size: ${sizeInMB} MB`);
                 
                 try {
-                    const formData = new FormData();
-                    formData.append('file', videoFile);
+                    // Chunk configuration
+                    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
+                    const totalChunks = Math.ceil(videoFile.size / CHUNK_SIZE);
                     
-                    console.log('Sending POST to /upload/video...');
-                    const uploadResponse = await fetch(`${API_URL}/upload/video`, {
-                        method: 'POST',
-                        body: formData
-                    });
+                    showAlert('episode-alert', `Préparation de l'upload (${sizeInMB} MB en ${totalChunks} morceaux)...`, 'success');
                     
-                    console.log(`Upload response status: ${uploadResponse.status}`);
+                    // Step 1: Initialize upload
+                    const initResponse = await fetch(
+                        `${API_URL}/upload/video/init?filename=${encodeURIComponent(videoFile.name)}&total_size=${videoFile.size}&total_chunks=${totalChunks}`,
+                        { method: 'POST' }
+                    );
                     
-                    if (!uploadResponse.ok) {
-                        let errorMsg = 'Erreur inconnue';
-                        try {
-                            const errorData = await uploadResponse.json();
-                            errorMsg = errorData.detail || errorMsg;
-                        } catch (e) {
-                            errorMsg = `HTTP ${uploadResponse.status}: ${uploadResponse.statusText}`;
-                        }
-                        console.error('Upload failed:', errorMsg);
-                        showAlert('episode-alert', 'Erreur upload vidéo: ' + errorMsg, 'error');
+                    if (!initResponse.ok) {
+                        const errorData = await initResponse.json();
+                        showAlert('episode-alert', 'Erreur init: ' + (errorData.detail || 'Erreur'), 'error');
                         return;
                     }
                     
-                    const uploadData = await uploadResponse.json();
-                    videoFilename = uploadData.filename;
-                    console.log(`Upload successful: ${videoFilename}, ${uploadData.size_mb} MB`);
-                    showAlert('episode-alert', `Vidéo uploadée (${uploadData.size_mb} MB). Création de l'épisode...`, 'success');
+                    const initData = await initResponse.json();
+                    const uploadId = initData.upload_id;
+                    console.log(`Upload initialized: ${uploadId}`);
+                    
+                    // Step 2: Upload chunks sequentially
+                    for (let i = 0; i < totalChunks; i++) {
+                        const start = i * CHUNK_SIZE;
+                        const end = Math.min(start + CHUNK_SIZE, videoFile.size);
+                        const chunk = videoFile.slice(start, end);
+                        
+                        const formData = new FormData();
+                        formData.append('chunk', chunk);
+                        
+                        // Retry logic (up to 3 times per chunk)
+                        let uploaded = false;
+                        let attempts = 0;
+                        while (!uploaded && attempts < 3) {
+                            attempts++;
+                            try {
+                                const chunkResponse = await fetch(
+                                    `${API_URL}/upload/video/chunk?upload_id=${uploadId}&chunk_index=${i}`,
+                                    { method: 'POST', body: formData }
+                                );
+                                
+                                if (chunkResponse.ok) {
+                                    const chunkData = await chunkResponse.json();
+                                    uploaded = true;
+                                    const progress = chunkData.progress;
+                                    const uploadedMB = ((i + 1) * CHUNK_SIZE / (1024 * 1024)).toFixed(1);
+                                    showAlert('episode-alert', 
+                                        `📤 Upload en cours : ${progress}% (${Math.min(uploadedMB, sizeInMB)}/${sizeInMB} MB) - Morceau ${i + 1}/${totalChunks}`,
+                                        'success'
+                                    );
+                                    console.log(`Chunk ${i + 1}/${totalChunks} uploaded (${progress}%)`);
+                                } else {
+                                    console.warn(`Chunk ${i} attempt ${attempts} failed, retrying...`);
+                                }
+                            } catch (chunkError) {
+                                console.warn(`Chunk ${i} network error attempt ${attempts}:`, chunkError);
+                                if (attempts >= 3) throw chunkError;
+                                await new Promise(r => setTimeout(r, 1000)); // wait 1s before retry
+                            }
+                        }
+                        
+                        if (!uploaded) {
+                            throw new Error(`Impossible d'uploader le morceau ${i + 1} après 3 tentatives`);
+                        }
+                    }
+                    
+                    // Step 3: Finalize upload
+                    showAlert('episode-alert', '✅ Upload terminé, finalisation...', 'success');
+                    const completeResponse = await fetch(
+                        `${API_URL}/upload/video/complete?upload_id=${uploadId}`,
+                        { method: 'POST' }
+                    );
+                    
+                    if (!completeResponse.ok) {
+                        const errorData = await completeResponse.json();
+                        showAlert('episode-alert', 'Erreur finalisation: ' + (errorData.detail || 'Erreur'), 'error');
+                        return;
+                    }
+                    
+                    const completeData = await completeResponse.json();
+                    videoFilename = completeData.filename;
+                    console.log(`Upload complete: ${videoFilename}, ${completeData.size_mb} MB`);
+                    showAlert('episode-alert', `✅ Vidéo uploadée (${completeData.size_mb} MB). Création de l'épisode...`, 'success');
                 } catch (error) {
                     console.error('Upload error:', error);
                     let errorMsg = error.message || 'Erreur réseau';
-                    if (error.name === 'TypeError' && errorMsg.includes('Failed to fetch')) {
-                        errorMsg = 'Connexion perdue ou timeout. Vérifiez votre connexion internet et réessayez.';
-                    }
-                    showAlert('episode-alert', 'Erreur upload vidéo: ' + errorMsg, 'error');
+                    showAlert('episode-alert', '❌ Erreur upload vidéo: ' + errorMsg, 'error');
                     return;
                 }
             }

@@ -526,9 +526,115 @@ async def get_family_progress(family_id: str):
 
 # ==================== VIDEO UPLOAD ROUTES ====================
 
+# In-memory upload sessions (for chunked uploads)
+upload_sessions: Dict[str, Dict[str, Any]] = {}
+
+@api_router.post("/upload/video/init")
+async def init_video_upload(filename: str, total_size: int, total_chunks: int):
+    """Initialize a chunked video upload session."""
+    try:
+        # Validate file extension
+        allowed_extensions = ['.mp4', '.mov', '.avi', '.webm', '.mkv']
+        file_ext = Path(filename).suffix.lower()
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Format non supporté. Formats acceptés: MP4, MOV, AVI, WebM, MKV"
+            )
+        
+        # Generate upload ID and temp filename
+        upload_id = str(uuid.uuid4())
+        final_filename = f"{upload_id}{file_ext}"
+        temp_path = VIDEOS_DIR / f".{final_filename}.tmp"
+        
+        # Create empty file
+        temp_path.touch()
+        
+        upload_sessions[upload_id] = {
+            "filename": final_filename,
+            "temp_path": str(temp_path),
+            "total_size": total_size,
+            "total_chunks": total_chunks,
+            "received_chunks": 0,
+            "created_at": datetime.utcnow()
+        }
+        
+        return {
+            "upload_id": upload_id,
+            "chunk_size": 5 * 1024 * 1024,  # 5MB per chunk
+            "message": "Upload initialisé"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur init upload: {str(e)}")
+
+@api_router.post("/upload/video/chunk")
+async def upload_video_chunk(
+    upload_id: str,
+    chunk_index: int,
+    chunk: UploadFile = File(...)
+):
+    """Upload a single chunk of a video."""
+    try:
+        session = upload_sessions.get(upload_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session d'upload non trouvée")
+        
+        temp_path = Path(session["temp_path"])
+        
+        # Read chunk data
+        chunk_data = await chunk.read()
+        
+        # Append to file (chunks arrive in order from frontend)
+        with open(temp_path, "ab") as f:
+            f.write(chunk_data)
+        
+        session["received_chunks"] += 1
+        
+        return {
+            "chunk_index": chunk_index,
+            "received_chunks": session["received_chunks"],
+            "total_chunks": session["total_chunks"],
+            "progress": round((session["received_chunks"] / session["total_chunks"]) * 100, 1)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur chunk: {str(e)}")
+
+@api_router.post("/upload/video/complete")
+async def complete_video_upload(upload_id: str):
+    """Finalize a chunked upload."""
+    try:
+        session = upload_sessions.get(upload_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session d'upload non trouvée")
+        
+        temp_path = Path(session["temp_path"])
+        final_path = VIDEOS_DIR / session["filename"]
+        
+        # Rename temp file to final filename
+        temp_path.rename(final_path)
+        
+        file_size = final_path.stat().st_size
+        
+        # Clean up session
+        del upload_sessions[upload_id]
+        
+        return {
+            "filename": session["filename"],
+            "size_mb": round(file_size / (1024 * 1024), 2),
+            "message": "Vidéo uploadée avec succès"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur finalisation: {str(e)}")
+
 @api_router.post("/upload/video")
 async def upload_video(file: UploadFile = File(...)):
-    """Upload a video file and return the filename to be stored in episode."""
+    """Legacy single-shot upload endpoint (for small files)."""
     try:
         # Validate file type
         allowed_types = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"]

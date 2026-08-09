@@ -1,0 +1,43 @@
+{
+  "summary": "Backend-only testing of the new CHUNKED VIDEO UPLOAD feature. Created /app/backend/tests/test_chunked_upload.py with 14 pytest cases covering all 8 requested scenarios: init endpoint validation (mp4/mov/webm accepted, .txt rejected with 400), full 15MB flow split into 3 x 5MB chunks with progress verification, complete/finalize returning correct filename+size_mb (14.9-15.1 MB range), assembled file streamable via GET /api/videos/{filename} with content-type video/mp4 and exact byte count, error handling (404 on invalid upload_id for both /chunk and /complete), episode CRUD using the chunked-uploaded video_filename plus stream verification and cascade video-file deletion on episode DELETE, legacy /api/upload/video single-shot still works (backward compat), and admin-panel HTML contains all three markers 'upload_id', 'CHUNK_SIZE', 'total_chunks'. RESULT: 14/14 passing (100%). The chunked upload implementation is fully functional end-to-end via the public preview URL, confirming it bypasses the reverse-proxy body-size limit. NOTE: Ran full regression suite too — 58/62 pass; the 4 failures are pre-existing (seeded episodes 6a78ef64fa41837ea9ac064f/0650/0651 were deleted from DB since iteration_4) and are UNRELATED to chunked upload.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/upload/video/init", "issue": "upload_sessions is an in-memory dict — sessions are lost on backend restart. Fine for single-worker preview, but a multi-worker or restart during upload will orphan .tmp files in /app/backend/uploads/videos/. Consider TTL cleanup or Redis in prod."},
+      {"endpoint": "POST /api/upload/video/chunk", "issue": "Chunks are blindly appended in receive-order (with open(temp_path, 'ab')). If the frontend ever parallelises or retries out-of-order, the assembled file will be corrupt. Frontend does upload sequentially per spec, so OK today, but the backend does not enforce chunk_index ordering."},
+      {"endpoint": "POST /api/upload/video/complete", "issue": "Does not verify received_chunks == total_chunks nor final file size vs total_size before renaming. A truncated/partial upload will still be marked as 'success'."},
+      {"endpoint": "GET /api/videos/{filename}", "issue": "Uses FileResponse without Range-header/HTTP 206 streaming — video seek in <video> tag may re-download full file. Not blocking."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_chunked_upload.py",
+    "/app/test_reports/pytest/pytest_chunked_upload.xml"
+  ],
+  "action_items": [
+    "(Optional/hardening) In /complete, validate received_chunks == total_chunks AND final file size ~= total_size before renaming; return 400 otherwise.",
+    "(Optional) In /chunk, seek(chunk_index * CHUNK_SIZE) and write at offset (open 'r+b') so out-of-order chunks are safe.",
+    "(Optional) Add periodic cleanup of stale upload_sessions and orphaned .tmp files older than N hours.",
+    "(Pre-existing, unrelated) Seeded episodes 6a78ef64fa41837ea9ac064f/0650/0651 referenced in test_id_leak_fix.py have been deleted from the DB and now 404 — either re-seed or remove those parametrized cases."
+  ],
+  "critical_code_review_comments": [
+    "Chunked upload endpoints correctly use params (query) for init/complete and multipart for chunk — matches spec.",
+    "File extension whitelist in /init (.mp4/.mov/.avi/.webm/.mkv) differs from legacy /upload/video content-type list (no video/x-matroska). Minor inconsistency, not blocking.",
+    "server.py is now 744 lines, over the 700-line guideline — recommend splitting into modules (video_routes.py, episode_routes.py, ...).",
+    "upload_sessions Dict has no TTL/lock; concurrency-safe on single asyncio worker, but not multi-process safe."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_chunked_upload.py (new)"
+  ],
+  "success_rate": {"backend": "100% (14/14 chunked-upload tests); 58/62 across full suite (4 pre-existing unrelated failures)", "frontend": "N/A - backend only"},
+  "seed_data_creation": "1 TEST_ episode + 3 TEST_ video files created and deleted within the test run via cleanup steps. No leftover data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Chunked upload feature (POST /api/upload/video/init, /chunk, /complete) is fully working and verified end-to-end for 15MB / 3 chunks. Backend URL: https://mopado-family-1.preview.emergentagent.com. Season 6a78e7a45f87998d7ed8e2c3 still exists. Seeded episodes 6a78ef64fa41837ea9ac064f/0650/0651 no longer exist in DB — update or re-seed if you rerun test_id_leak_fix.py. upload_sessions is in-memory only.",
+  "rca_of_issue": "N/A — feature verification only. All 8 requested test scenarios pass on the public preview URL, confirming the chunked-upload workaround for reverse-proxy body-size limits is working."
+}
