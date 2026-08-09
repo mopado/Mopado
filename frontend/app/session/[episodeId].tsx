@@ -28,6 +28,7 @@ interface Card {
 }
 
 interface MiniGame {
+  type?: string;  // letters, true_false, ranking, quiz, custom
   name: string;
   instructions: string;
   data?: any;
@@ -344,7 +345,7 @@ function CardsStepContent({
   );
 }
 
-// Game Step Component
+// Game Step Component - dispatches to specific game type
 function GameStepContent({
   game,
   onNext,
@@ -352,15 +353,7 @@ function GameStepContent({
   game: MiniGame;
   onNext: () => void;
 }) {
-  // Generate random letters for "C'est quali" game
-  const [letters] = useState(() => {
-    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const randomLetters = [];
-    for (let i = 0; i < 4; i++) {
-      randomLetters.push(alphabet[Math.floor(Math.random() * alphabet.length)]);
-    }
-    return randomLetters;
-  });
+  const gameType = game.type || 'letters';
 
   return (
     <View style={styles.stepContainer}>
@@ -374,27 +367,231 @@ function GameStepContent({
           <Text style={styles.gameInstructionsText}>{game.instructions}</Text>
         </View>
 
-        {/* Display letters for "C'est quali" game */}
-        <View style={styles.lettersContainer}>
-          {letters.map((letter, index) => (
-            <View key={index} style={styles.letterCard}>
-              <Text style={styles.letterText}>{letter}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.instructionCard}>
-          <Ionicons name="happy" size={24} color={colors.accent} />
-          <Text style={styles.instructionText}>
-            Chacun trouve une qualité pour un autre membre de la famille commençant par l'une des lettres
-          </Text>
-        </View>
+        {/* Render game type-specific content */}
+        {gameType === 'letters' && <LettersGame />}
+        {gameType === 'true_false' && <TrueFalseGame data={game.data} />}
+        {gameType === 'ranking' && <RankingGame data={game.data} />}
+        {gameType === 'quiz' && <QuizGame data={game.data} />}
+        {gameType === 'custom' && <CustomGame />}
       </ScrollView>
 
       <TouchableOpacity style={styles.continueButton} onPress={onNext}>
         <Text style={styles.continueButtonText}>Nous avons terminé</Text>
         <Ionicons name="checkmark" size={20} color={colors.textWhite} />
       </TouchableOpacity>
+    </View>
+  );
+}
+
+// Letters Game (C'est quali)
+function LettersGame() {
+  const [letters] = useState(() => {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const randomLetters = [];
+    for (let i = 0; i < 4; i++) {
+      randomLetters.push(alphabet[Math.floor(Math.random() * alphabet.length)]);
+    }
+    return randomLetters;
+  });
+
+  return (
+    <>
+      <View style={styles.lettersContainer}>
+        {letters.map((letter, index) => (
+          <View key={index} style={styles.letterCard}>
+            <Text style={styles.letterText}>{letter}</Text>
+          </View>
+        ))}
+      </View>
+      <View style={styles.instructionCard}>
+        <Ionicons name="happy" size={24} color={colors.accent} />
+        <Text style={styles.instructionText}>
+          Chacun trouve une qualité pour un autre membre de la famille commençant par l'une des lettres
+        </Text>
+      </View>
+    </>
+  );
+}
+
+// True/False Game
+function TrueFalseGame({ data }: { data?: any }) {
+  const [answers, setAnswers] = useState<{ [key: number]: boolean | null }>({});
+  const statements = data?.statements || [];
+
+  const handleAnswer = (index: number, answer: boolean) => {
+    setAnswers({ ...answers, [index]: answer });
+  };
+
+  return (
+    <View style={styles.gameContent}>
+      {statements.map((statement: any, index: number) => {
+        const userAnswer = answers[index];
+        const isRevealed = userAnswer !== undefined && userAnswer !== null;
+        const isCorrect = userAnswer === statement.answer;
+        
+        return (
+          <View key={index} style={styles.tfCard}>
+            <Text style={styles.tfText}>{statement.text}</Text>
+            <View style={styles.tfButtonsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.tfButton,
+                  userAnswer === true && (isCorrect ? styles.tfButtonCorrect : styles.tfButtonWrong),
+                ]}
+                onPress={() => handleAnswer(index, true)}
+              >
+                <Ionicons name="checkmark" size={20} color={colors.textWhite} />
+                <Text style={styles.tfButtonText}>Vrai</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.tfButton,
+                  styles.tfButtonFalse,
+                  userAnswer === false && (isCorrect ? styles.tfButtonCorrect : styles.tfButtonWrong),
+                ]}
+                onPress={() => handleAnswer(index, false)}
+              >
+                <Ionicons name="close" size={20} color={colors.textWhite} />
+                <Text style={styles.tfButtonText}>Faux</Text>
+              </TouchableOpacity>
+            </View>
+            {isRevealed && (
+              <View style={styles.tfResult}>
+                <Ionicons
+                  name={isCorrect ? 'checkmark-circle' : 'information-circle'}
+                  size={20}
+                  color={isCorrect ? colors.success : colors.info}
+                />
+                <Text style={styles.tfResultText}>
+                  {isCorrect ? 'Bonne réponse !' : `La réponse était : ${statement.answer ? 'Vrai' : 'Faux'}`}
+                </Text>
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// Ranking Game
+function RankingGame({ data }: { data?: any }) {
+  const initialItems = data?.items || [];
+  const [items, setItems] = useState<string[]>(initialItems);
+  const question = data?.question || 'Classe ces éléments';
+
+  const moveUp = (index: number) => {
+    if (index === 0) return;
+    const newItems = [...items];
+    [newItems[index - 1], newItems[index]] = [newItems[index], newItems[index - 1]];
+    setItems(newItems);
+  };
+
+  const moveDown = (index: number) => {
+    if (index === items.length - 1) return;
+    const newItems = [...items];
+    [newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]];
+    setItems(newItems);
+  };
+
+  return (
+    <View style={styles.gameContent}>
+      <View style={styles.rankingQuestion}>
+        <Text style={styles.rankingQuestionText}>{question}</Text>
+      </View>
+      {items.map((item, index) => (
+        <View key={`${item}-${index}`} style={styles.rankingItem}>
+          <View style={styles.rankingBadge}>
+            <Text style={styles.rankingBadgeText}>{index + 1}</Text>
+          </View>
+          <Text style={styles.rankingText}>{item}</Text>
+          <View style={styles.rankingArrows}>
+            <TouchableOpacity
+              onPress={() => moveUp(index)}
+              disabled={index === 0}
+              style={[styles.rankingArrow, index === 0 && styles.rankingArrowDisabled]}
+            >
+              <Ionicons name="chevron-up" size={20} color={index === 0 ? colors.textLight : colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => moveDown(index)}
+              disabled={index === items.length - 1}
+              style={[styles.rankingArrow, index === items.length - 1 && styles.rankingArrowDisabled]}
+            >
+              <Ionicons name="chevron-down" size={20} color={index === items.length - 1 ? colors.textLight : colors.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// Quiz Game
+function QuizGame({ data }: { data?: any }) {
+  const questions = data?.questions || [];
+  const [answers, setAnswers] = useState<{ [key: number]: number | null }>({});
+
+  const handleAnswer = (questionIndex: number, answerIndex: number) => {
+    setAnswers({ ...answers, [questionIndex]: answerIndex });
+  };
+
+  return (
+    <View style={styles.gameContent}>
+      {questions.map((q: any, qIndex: number) => {
+        const userAnswer = answers[qIndex];
+        const isAnswered = userAnswer !== undefined && userAnswer !== null;
+        
+        return (
+          <View key={qIndex} style={styles.quizCard}>
+            <Text style={styles.quizQuestion}>{q.question}</Text>
+            {q.answers?.map((answer: string, aIndex: number) => {
+              if (!answer) return null;
+              const isSelected = userAnswer === aIndex;
+              const isCorrect = aIndex === q.correct;
+              
+              return (
+                <TouchableOpacity
+                  key={aIndex}
+                  style={[
+                    styles.quizAnswer,
+                    isSelected && (isCorrect ? styles.quizAnswerCorrect : styles.quizAnswerWrong),
+                    isAnswered && !isSelected && isCorrect && styles.quizAnswerCorrectHint,
+                  ]}
+                  onPress={() => handleAnswer(qIndex, aIndex)}
+                  disabled={isAnswered}
+                >
+                  <Text style={[
+                    styles.quizAnswerText,
+                    isSelected && styles.quizAnswerTextSelected,
+                  ]}>
+                    {answer}
+                  </Text>
+                  {isAnswered && isSelected && (
+                    <Ionicons
+                      name={isCorrect ? 'checkmark-circle' : 'close-circle'}
+                      size={20}
+                      color={colors.textWhite}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// Custom Game
+function CustomGame() {
+  return (
+    <View style={styles.instructionCard}>
+      <Ionicons name="game-controller" size={24} color={colors.accent} />
+      <Text style={styles.instructionText}>
+        Suivez les instructions du jeu ci-dessus et amusez-vous en famille !
+      </Text>
     </View>
   );
 }
@@ -692,6 +889,156 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: 'bold',
     color: colors.textWhite,
+  },
+  gameContent: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  // True/False Game styles
+  tfCard: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  tfText: {
+    fontSize: 16,
+    color: colors.text,
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  tfButtonsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  tfButton: {
+    flex: 1,
+    backgroundColor: colors.success,
+    paddingVertical: 12,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tfButtonFalse: {
+    backgroundColor: colors.error,
+  },
+  tfButtonCorrect: {
+    backgroundColor: colors.success,
+  },
+  tfButtonWrong: {
+    backgroundColor: colors.error,
+    opacity: 0.6,
+  },
+  tfButtonText: {
+    color: colors.textWhite,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tfResult: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: colors.backgroundTertiary,
+    borderRadius: 8,
+    gap: 6,
+  },
+  tfResultText: {
+    fontSize: 13,
+    color: colors.text,
+    flex: 1,
+  },
+  // Ranking Game styles
+  rankingQuestion: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  rankingQuestionText: {
+    fontSize: 15,
+    color: colors.text,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  rankingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  rankingBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  rankingBadgeText: {
+    color: colors.textWhite,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  rankingText: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
+  },
+  rankingArrows: {
+    gap: 4,
+  },
+  rankingArrow: {
+    padding: 4,
+  },
+  rankingArrowDisabled: {
+    opacity: 0.3,
+  },
+  // Quiz Game styles
+  quizCard: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  quizQuestion: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  quizAnswer: {
+    backgroundColor: colors.backgroundTertiary,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  quizAnswerCorrect: {
+    backgroundColor: colors.success,
+  },
+  quizAnswerWrong: {
+    backgroundColor: colors.error,
+  },
+  quizAnswerCorrectHint: {
+    backgroundColor: colors.accentLight,
+  },
+  quizAnswerText: {
+    fontSize: 14,
+    color: colors.text,
+    flex: 1,
+  },
+  quizAnswerTextSelected: {
+    color: colors.textWhite,
+    fontWeight: '600',
   },
   closingHeader: {
     alignItems: 'center',

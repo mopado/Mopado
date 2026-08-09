@@ -1,0 +1,44 @@
+{
+  "summary": "Full backend + frontend testing of the new multi-type mini-game feature (letters, true_false, ranking, quiz, custom). Backend: 12/13 pytest cases passed on /app/backend/tests/test_minigame_types.py. All 5 game types can be created via POST /api/episodes with their type-specific data (statements / question+items / questions+answers+correct / null) and are correctly persisted and returned via GET /api/episodes/{id} with mini_game.type intact. Pydantic default 'type=letters' correctly applies when the field is omitted (backward compatibility). Seeded episodes 6a78ef64fa41837ea9ac064f (true_false), 6a78ef64fa41837ea9ac0650 (ranking), 6a78ef64fa41837ea9ac0651 (quiz) all return the expected mini_game.type. GET /api/admin-panel contains all 5 game-type options and every dynamic-field container (true-false-fields, ranking-fields, quiz-fields, letters-fields) plus type-specific inputs (statements, ranking question+items, quiz questions). Frontend (Expo web at 390x844): login flow works (famille.test@mopado.fr / test123), navigating to /session/{episodeId}?seasonId=... loads the episode. On the true_false episode the game screen renders 'Vrai' and 'Faux' buttons per statement, clicking 'Vrai' on the correct statement immediately shows 'Bonne réponse !' feedback. The ranking episode renders 4 items each with a numbered badge (1,2,3,4) and up/down chevron controls (first item's up arrow and last item's down arrow are visibly disabled). The quiz episode renders the question and 3 answer buttons; clicking a wrong answer paints it red with an X icon while the correct answer 'En parlant' is highlighted with the accentLight hint background. The lone failing pytest is a pre-existing (not part of this feature) bug: MongoDB `_id` is still present in GET /api/episodes/{id} responses because str_object_id keeps the `_id` key alongside the added `id`. Test credentials are present at /app/memory/test_credentials.md and work.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/episodes/{id}", "issue": "MongoDB '_id' is leaked in the response. str_object_id({**episode, 'id': str(episode['_id'])}) does not pop '_id'. Same pattern in GET /api/seasons, /api/seasons/{id}, /api/episodes/season/{id}, /api/sessions/family/{id}, /api/badges. Exclude '_id' before serialization."},
+      {"endpoint": "POST /api/episodes (mini_game validation)", "issue": "MiniGame.data is a free-form Dict[str, Any] with no per-type validation. Server accepts a quiz payload with correct index >= len(answers) or missing statements/items. Consider validating data shape per type (or use a discriminated union)."},
+      {"endpoint": "POST /api/auth/forgot-password", "issue": "Query param 'email: EmailStr' typed as a body will cause 422 on a JSON call; existing endpoint likely broken, but out of scope for this feature."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "session/[episodeId] - RankingGame", "issues": ["Ranking chevron TouchableOpacity has padding:4 which produces a ~28x28 touch target — below the 44x44 minimum recommendation."]},
+      {"screen": "session/[episodeId] - QuizGame", "issues": ["Wrong-answer background uses colors.error but the answer becomes disabled after selection, which is correct; however the correct answer is not revealed as clearly (uses accentLight). Consider a stronger success outline on the correct answer when the user picks wrong."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_minigame_types.py",
+    "/app/test_reports/pytest/pytest_minigame_types.xml"
+  ],
+  "action_items": [
+    "Fix _id leak across all list/get endpoints by popping '_id' after adding 'id' (or using a projection). This is pre-existing but should be cleaned up.",
+    "Optional: Add per-type validation for MiniGame.data (statements shape for true_false, items+question for ranking, questions+answers+correct index bounds for quiz).",
+    "Optional: Increase Ranking chevron hit area to 44x44 (wrap in a hitSlop or add larger padding).",
+    "Optional: Reveal the correct quiz answer with a stronger visual (success color + checkmark) when the user selects a wrong answer."
+  ],
+  "critical_code_review_comments": [
+    "server.py has grown to 628 lines; still under 700 but close. Continue splitting by domain (episodes, minigames, videos, admin) when adding more.",
+    "MiniGame.data typed as Dict[str, Any] loses type safety — consider Pydantic discriminated union per game type for stronger contracts.",
+    "session/[episodeId].tsx is 1123 lines and contains 5 sub-components; consider extracting each game component (LettersGame, TrueFalseGame, RankingGame, QuizGame, CustomGame) into /src/components/games/*.tsx to keep files small and each game reusable.",
+    "Interactive game elements (Vrai/Faux buttons, chevron arrows, quiz answers, Continue button) are missing testID props, making UI automation fragile — add testID to every TouchableOpacity used in games.",
+    "LettersGame regenerates 4 random letters on every mount but stores them in useState initializer so they persist within a single game step — good; note that navigating away and back will reshuffle."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "92% (12/13)", "frontend": "100% for feature under test"},
+  "seed_data_creation": "Created 6 TEST_ episodes (letters, true_false, ranking, quiz, custom, no-type-default) all deleted at end of test run via the cleanup test. Used existing season 6a78e7a45f87998d7ed8e2c3.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend URL: EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env (https://mopado-family-1.preview.emergentagent.com). Seeded game episodes: 6a78ef64fa41837ea9ac064f (true_false), 6a78ef64fa41837ea9ac0650 (ranking), 6a78ef64fa41837ea9ac0651 (quiz). Season: 6a78e7a45f87998d7ed8e2c3. Test user famille.test@mopado.fr / test123 in /app/memory/test_credentials.md. Mini-game feature end-to-end works; only remaining backend issue is the pre-existing _id leak from GET /api/episodes/{id}.",
+  "rca_of_issue": "Not a bug fix run — this was feature verification. Pre-existing _id leak RCA: str_object_id() converts ObjectId values to str recursively but never removes the '_id' key. Episode/Season/Badge/Session GET handlers do `str_object_id({**doc, 'id': str(doc['_id'])})` which retains '_id' in the response alongside 'id'. Fix: `doc.pop('_id', None)` before spreading, or `{k:v for k,v in doc.items() if k != '_id'}`."
+}

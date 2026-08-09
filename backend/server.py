@@ -93,9 +93,10 @@ class Card(BaseModel):
     content: str
 
 class MiniGame(BaseModel):
+    type: str = "letters"  # letters, true_false, ranking, quiz, custom
     name: str
     instructions: str
-    data: Optional[Dict[str, Any]] = None  # Pour les données spécifiques (ex: lettres tirées)
+    data: Optional[Dict[str, Any]] = None  # Configuration spécifique au type de jeu
 
 class Episode(BaseModel):
     season_id: str

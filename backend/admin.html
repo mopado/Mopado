@@ -356,12 +356,66 @@
 Qu'as-tu aimé dans ce moment ?"></textarea>
                     </div>
                     <div class="form-group">
+                        <label>Mini-jeu - Type</label>
+                        <select id="episode-game-type" onchange="updateGameTypeFields()">
+                            <option value="">Pas de mini-jeu</option>
+                            <option value="letters">Tirage de lettres (C'est quali)</option>
+                            <option value="true_false">Vrai / Faux</option>
+                            <option value="ranking">Classement</option>
+                            <option value="quiz">Quiz (choix multiples)</option>
+                            <option value="custom">Personnalisé</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label>Mini-jeu - Nom</label>
                         <input type="text" id="episode-game-name" placeholder="Ex: C'est quali">
                     </div>
                     <div class="form-group">
                         <label>Mini-jeu - Instructions</label>
-                        <textarea id="episode-game-instructions" placeholder="4 lettres sont tirées. Chaque participant doit trouver une qualité pour un autre membre de la famille commençant par l'une des lettres tirées."></textarea>
+                        <textarea id="episode-game-instructions" placeholder="Instructions générales du jeu"></textarea>
+                    </div>
+                    
+                    <!-- True/False specific fields -->
+                    <div id="true-false-fields" class="game-type-fields" style="display: none;">
+                        <div class="form-group">
+                            <label>Affirmations (une par ligne, format: "Affirmation | vrai" ou "Affirmation | faux")</label>
+                            <textarea id="episode-true-false-statements" placeholder="Il est important de dire ce qu'on pense | vrai
+Les émotions négatives ne devraient pas être exprimées | faux
+Rire fait du bien | vrai"></textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- Ranking specific fields -->
+                    <div id="ranking-fields" class="game-type-fields" style="display: none;">
+                        <div class="form-group">
+                            <label>Question de classement</label>
+                            <input type="text" id="episode-ranking-question" placeholder="Ex: Classe ces choses selon ce qui t'énerve le plus">
+                        </div>
+                        <div class="form-group">
+                            <label>Éléments à classer (un par ligne)</label>
+                            <textarea id="episode-ranking-items" placeholder="Faire mes devoirs
+Ranger ma chambre
+Manger des légumes
+Aller au lit tôt"></textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- Quiz specific fields -->
+                    <div id="quiz-fields" class="game-type-fields" style="display: none;">
+                        <div class="form-group">
+                            <label>Questions du quiz (format: "Question | Réponse1 | Réponse2 | Réponse3 | Index correct (0-2)")</label>
+                            <textarea id="episode-quiz-questions" placeholder="Qu'est-ce qui rend heureux ? | La colère | Le partage | La solitude | 1
+Comment exprimer ses émotions ? | En se cachant | En parlant | En criant | 1"></textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- Letters specific info -->
+                    <div id="letters-fields" class="game-type-fields" style="display: none;">
+                        <div class="form-group">
+                            <p style="color: #7F8C8D; padding: 12px; background: #FFF5EB; border-radius: 8px;">
+                                📝 Le jeu tirera automatiquement 4 lettres aléatoires. Les participants devront trouver une qualité pour chaque lettre.
+                            </p>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Récompense Mopado$ *</label>
@@ -398,6 +452,68 @@ Qu'as-tu aimé dans ce moment ?"></textarea>
             if (tabName === 'episodes') {
                 loadSeasonsForSelect();
             }
+        }
+        
+        // Update fields visibility based on game type
+        function updateGameTypeFields() {
+            const type = document.getElementById('episode-game-type').value;
+            document.querySelectorAll('.game-type-fields').forEach(el => el.style.display = 'none');
+            
+            if (type) {
+                const fieldsElement = document.getElementById(`${type.replace('_', '-')}-fields`);
+                if (fieldsElement) {
+                    fieldsElement.style.display = 'block';
+                }
+            }
+        }
+        
+        // Build mini-game data based on type
+        function buildMiniGameData() {
+            const type = document.getElementById('episode-game-type').value;
+            if (!type) return null;
+            
+            const name = document.getElementById('episode-game-name').value;
+            const instructions = document.getElementById('episode-game-instructions').value;
+            
+            if (!name || !instructions) return null;
+            
+            let data = {};
+            
+            if (type === 'true_false') {
+                const statements = document.getElementById('episode-true-false-statements').value
+                    .split('\n')
+                    .filter(line => line.trim())
+                    .map(line => {
+                        const parts = line.split('|').map(p => p.trim());
+                        return {
+                            text: parts[0],
+                            answer: parts[1]?.toLowerCase() === 'vrai'
+                        };
+                    });
+                data = { statements };
+            } else if (type === 'ranking') {
+                const question = document.getElementById('episode-ranking-question').value;
+                const items = document.getElementById('episode-ranking-items').value
+                    .split('\n')
+                    .filter(line => line.trim())
+                    .map(line => line.trim());
+                data = { question, items };
+            } else if (type === 'quiz') {
+                const questions = document.getElementById('episode-quiz-questions').value
+                    .split('\n')
+                    .filter(line => line.trim())
+                    .map(line => {
+                        const parts = line.split('|').map(p => p.trim());
+                        return {
+                            question: parts[0],
+                            answers: [parts[1], parts[2], parts[3]],
+                            correct: parseInt(parts[4]) || 0
+                        };
+                    });
+                data = { questions };
+            }
+            
+            return { type, name, instructions, data };
         }
 
         // Load stats
@@ -576,13 +692,7 @@ Qu'as-tu aimé dans ce moment ?"></textarea>
                 content: content.trim()
             }));
             
-            const gameName = document.getElementById('episode-game-name').value;
-            const gameInstructions = document.getElementById('episode-game-instructions').value;
-            const miniGame = (gameName && gameInstructions) ? {
-                name: gameName,
-                instructions: gameInstructions,
-                data: {}
-            } : null;
+            const miniGame = buildMiniGameData();
             
             const data = {
                 season_id: document.getElementById('episode-season').value,
