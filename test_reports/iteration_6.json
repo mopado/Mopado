@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 6 — E2E testing (backend + frontend) of the 12 new episode features. BACKEND: created /app/backend/tests/test_new_episode_features.py with 5 pytest cases covering (1) episode round-trip of all new fields (cards_message, cards_after_game, mopado_reward, reward_message, bonus_mission, closing_message, badge_name, badge_description), (2) default values when fields omitted, (3) PUT /sessions/{id}/complete returning reward_message/bonus_mission/closing_message/badges_earned + awarding the badge, (4) badge idempotency on 2nd completion (no duplicate, already_completed=true, +0 Mopado$), (5) pre-seeded episode 6a7910733ebcb913a5aa5aaf carries all new fields. RESULT: 5/5 passed. FRONTEND: full mobile flow tested via Playwright at 375x667 against public preview URL — login → home → 'Commencer' → video step → cards step ('On répond chacun son tour.' shown) → letters game ('Démarrer' button + 4 UNIQUE letters revealed only after click) → cards_after_game step (labelled 'Bonus • Carte 1 sur 1') → closing screen (empty submit → red error 'Choisissez d'abord un mot' shown; filled + Terminer works) → celebration (+10 Mopado$, reward_message 'Vous avez été formidables !', badge 'Explorateur de qualités' shown, 'Voir la mission bonus' button because bonus_mission exists) → bonus mission screen (mission text 'Cette semaine, trouve une situation où tu as utilisé une de tes qualités.' rendered) → 'Retour à l'accueil'. All 8 requested frontend scenarios PASS except FRONTEND 1 which has an observed edge case (see ui_bugs).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "app/(tabs)/home.tsx",
+        "issue": "After completing an episode and returning via 'Retour à l'accueil', the same episode may still appear on the Home 'Épisode de la semaine' section even though user.completed_episodes and counters have been updated (progression counter went 2→3 and badges 0→1 correctly, but 'Test All Features' still rendered with a 'Commencer' button). Likely caused by episodes being loaded into local state on mount without a re-fetch/re-filter when user.completed_episodes changes. A fresh reload of /home correctly filters it out.",
+        "testID": "n/a (Épisode de la semaine card)",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_episode_features.py",
+    "/app/test_reports/pytest/pytest_new_features.xml"
+  ],
+  "action_items": [
+    "home.tsx: re-run the episode filter (or re-fetch episodes) when useAuth().user.completed_episodes changes, or add user.completed_episodes.length to the useEffect deps that populates the episodes list, so a completed episode disappears immediately without needing a full page reload.",
+    "(Nice-to-have) The letters game randomly picks 4 letters from A–Z with no guarantee of a solvable set — main agent may want to curate a shortlist that excludes rare letters (K, W, X, Y, Z) since none of them was drawn in this run but they could produce awkward challenges."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 774 lines — still above the 700-line guideline. Recommend splitting into routers (episodes.py, sessions.py, videos.py).",
+    "session complete endpoint uses ObjectId(session['episode_id']) directly — if a session was persisted with a non-ObjectId episode_id it would 400. Not observed, but worth a safety guard.",
+    "Badge award uses user.get('badges', []) captured BEFORE the update; safe today, but if the same user completed two episodes with the same badge_name concurrently, both could pass the 'not in user.badges' check. $addToSet on update makes final storage idempotent, but badges_earned response could be reported twice. Minor race, not observed.",
+    "session/[episodeId].tsx is 1464 lines — should be split into multiple components (VideoStep, CardsStep, GameStep with sub-games, ClosingStep, CelebrationStep, BonusMissionStep) in their own files.",
+    "reward_message default in Episode / EpisodeCreate models is 'Merci pour ce beau moment ensemble !' but the frontend also hard-codes a fallback with the same string — keep in sync if changed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_episode_features.py (new)"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "~95% (7/8 scenarios PASS; 1 stale-home issue)"},
+  "seed_data_creation": "Created 1 TEST_ episode + 1 TEST_ family user + 1 defaults episode; TEST_ episodes deleted in teardown; TEST_ user left in DB (email prefixed TEST_new_features_*@mopado.fr).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "New episode fields fully round-trip via POST/GET /api/episodes and PUT /api/sessions/{id}/complete. Badge awarding is idempotent. Full session UI flow works end-to-end on the public preview URL. Only known issue: home screen 'Épisode de la semaine' shows a stale (completed) episode until page is reloaded — trace app/(tabs)/home.tsx line ~75 where filter runs on `user?.completed_episodes?.includes(ep.id)` and check that episodes/useEffect re-runs on user change. Test user: famille.test@mopado.fr / test123. Test episode with all features: 6a7910733ebcb913a5aa5aaf (season 6a78e7a45f87998d7ed8e2c3). All 5 new-features pytest cases at /app/backend/tests/test_new_episode_features.py pass in ~1.3s.",
+  "rca_of_issue": "Stale home episode after completion — hypothesis: home.tsx fetches /api/episodes/season/{id} once on mount and stores the raw list in local React state; the filter `!user?.completed_episodes?.includes(ep.id)` runs on each render so it SHOULD react to user changes, but if the fetch happens BEFORE the AuthContext refreshUser() resolves (or if home is remounted with stale user prop from a cached context render), the freshly-completed episode leaks through. Reproduction: complete an episode → click 'Retour à l'accueil' → the just-completed episode may still appear on home. Mitigation: add `user?.completed_episodes?.length` (or the whole array) to the deps of the useEffect that loads episodes, or filter reactively from a useMemo tied to user.completed_episodes."
+}

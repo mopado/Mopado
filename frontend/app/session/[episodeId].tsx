@@ -41,11 +41,18 @@ interface Episode {
   description: string;
   video_filename?: string;
   cards: Card[];
+  cards_message?: string;
+  cards_after_game?: Card[];
   mini_game?: MiniGame;
   mopado_reward: number;
+  reward_message?: string;
+  bonus_mission?: string;
+  closing_message?: string;
+  badge_name?: string;
+  badge_description?: string;
 }
 
-type SessionStep = 'video' | 'cards' | 'game' | 'closing' | 'celebration';
+type SessionStep = 'video' | 'cards' | 'game' | 'cards_after' | 'closing' | 'celebration' | 'bonus_mission';
 
 export default function SessionScreen() {
   const { episodeId, seasonId } = useLocalSearchParams();
@@ -56,9 +63,15 @@ export default function SessionScreen() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<SessionStep>('video');
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const [currentCardAfterIndex, setCurrentCardAfterIndex] = useState(0);
   const [closingWord, setClosingWord] = useState('');
+  const [closingError, setClosingError] = useState('');
   const [mopadoEarned, setMopadoEarned] = useState(0);
   const [alreadyCompleted, setAlreadyCompleted] = useState(false);
+  const [rewardMessage, setRewardMessage] = useState('');
+  const [bonusMission, setBonusMission] = useState<string | null>(null);
+  const [closingMessage, setClosingMessage] = useState('Rendez-vous la semaine prochaine pour un nouveau moment qui compte, ensemble !');
+  const [badgesEarned, setBadgesEarned] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCompleting, setIsCompleting] = useState(false);
 
@@ -115,6 +128,8 @@ export default function SessionScreen() {
         setCurrentStep('cards');
       } else if (episode?.mini_game) {
         setCurrentStep('game');
+      } else if (episode?.cards_after_game && episode.cards_after_game.length > 0) {
+        setCurrentStep('cards_after');
       } else {
         setCurrentStep('closing');
       }
@@ -123,22 +138,35 @@ export default function SessionScreen() {
         setCurrentCardIndex(currentCardIndex + 1);
       } else if (episode?.mini_game) {
         setCurrentStep('game');
+      } else if (episode?.cards_after_game && episode.cards_after_game.length > 0) {
+        setCurrentStep('cards_after');
       } else {
         setCurrentStep('closing');
       }
     } else if (currentStep === 'game') {
-      setCurrentStep('closing');
+      if (episode?.cards_after_game && episode.cards_after_game.length > 0) {
+        setCurrentStep('cards_after');
+      } else {
+        setCurrentStep('closing');
+      }
+    } else if (currentStep === 'cards_after') {
+      if (currentCardAfterIndex < (episode?.cards_after_game?.length || 0) - 1) {
+        setCurrentCardAfterIndex(currentCardAfterIndex + 1);
+      } else {
+        setCurrentStep('closing');
+      }
     }
   };
 
   const handleCompleteSession = async () => {
     if (!closingWord.trim()) {
-      Alert.alert('Attention', 'Veuillez entrer un mot de fin');
+      setClosingError("Choisissez d'abord un mot");
       return;
     }
+    setClosingError('');
 
     if (!sessionId) {
-      Alert.alert('Erreur', 'Session invalide');
+      setClosingError('Session invalide');
       return;
     }
 
@@ -157,16 +185,28 @@ export default function SessionScreen() {
         const data = await response.json();
         setMopadoEarned(data.mopado_earned);
         setAlreadyCompleted(data.already_completed || false);
+        setRewardMessage(data.reward_message || 'Merci pour ce beau moment ensemble !');
+        setBonusMission(data.bonus_mission || null);
+        setClosingMessage(data.closing_message || 'Rendez-vous la semaine prochaine pour un nouveau moment qui compte, ensemble !');
+        setBadgesEarned(data.badges_earned || []);
         await refreshUser();
         setCurrentStep('celebration');
       } else {
-        Alert.alert('Erreur', 'Impossible de terminer la session');
+        setClosingError('Impossible de terminer la session');
       }
     } catch (error) {
       console.error('Error completing session:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      setClosingError('Une erreur est survenue');
     } finally {
       setIsCompleting(false);
+    }
+  };
+  
+  const handleNextAfterCelebration = () => {
+    if (bonusMission) {
+      setCurrentStep('bonus_mission');
+    } else {
+      handleExit();
     }
   };
 
@@ -211,6 +251,7 @@ export default function SessionScreen() {
           card={episode.cards[currentCardIndex]}
           currentIndex={currentCardIndex}
           totalCards={episode.cards.length}
+          message={episode.cards_message || 'On répond chacun son tour.'}
           onNext={handleNextStep}
         />
       )}
@@ -220,11 +261,24 @@ export default function SessionScreen() {
         <GameStepContent game={episode.mini_game} onNext={handleNextStep} />
       )}
 
+      {/* Cards After Game Step */}
+      {currentStep === 'cards_after' && episode.cards_after_game && episode.cards_after_game.length > 0 && (
+        <CardsStepContent
+          card={episode.cards_after_game[currentCardAfterIndex]}
+          currentIndex={currentCardAfterIndex}
+          totalCards={episode.cards_after_game.length}
+          message={episode.cards_message || 'On répond chacun son tour.'}
+          onNext={handleNextStep}
+          isAfterGame={true}
+        />
+      )}
+
       {/* Closing Step */}
       {currentStep === 'closing' && (
         <ClosingStepContent
           closingWord={closingWord}
           setClosingWord={setClosingWord}
+          error={closingError}
           onComplete={handleCompleteSession}
           isCompleting={isCompleting}
         />
@@ -235,6 +289,18 @@ export default function SessionScreen() {
         <CelebrationStepContent
           mopadoEarned={mopadoEarned}
           alreadyCompleted={alreadyCompleted}
+          rewardMessage={rewardMessage}
+          closingMessage={closingMessage}
+          badgesEarned={badgesEarned}
+          hasBonusMission={!!bonusMission}
+          onFinish={handleNextAfterCelebration}
+        />
+      )}
+      
+      {/* Bonus Mission Step */}
+      {currentStep === 'bonus_mission' && bonusMission && (
+        <BonusMissionStepContent
+          mission={bonusMission}
           onFinish={handleExit}
         />
       )}
@@ -257,6 +323,9 @@ function VideoStepContent({
   const player = useVideoPlayer(videoUrl, (player) => {
     player.loop = false;
     player.muted = false;
+    if (videoUrl) {
+      player.play();
+    }
   });
 
   return (
@@ -288,7 +357,7 @@ function VideoStepContent({
         <View style={styles.instructionCard}>
           <Ionicons name="information-circle" size={24} color={colors.primary} />
           <Text style={styles.instructionText}>
-            Regardez cette courte vidéo ensemble en famille (maximum 2 minutes)
+            Regardez cette courte vidéo ensemble en famille
           </Text>
         </View>
       </ScrollView>
@@ -306,34 +375,39 @@ function CardsStepContent({
   card,
   currentIndex,
   totalCards,
+  message,
   onNext,
+  isAfterGame = false,
 }: {
   card: Card;
   currentIndex: number;
   totalCards: number;
+  message: string;
   onNext: () => void;
+  isAfterGame?: boolean;
 }) {
   return (
     <View style={styles.stepContainer}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.progressIndicator}>
           <Text style={styles.progressText}>
-            Carte {currentIndex + 1} sur {totalCards}
+            {isAfterGame ? 'Bonus • ' : ''}Carte {currentIndex + 1} sur {totalCards}
           </Text>
         </View>
 
         <View style={styles.cardContainer}>
-          <View style={styles.cardIcon}>
-            <Ionicons name="chatbox-ellipses" size={48} color={colors.primary} />
+          <View style={styles.cardDecoration}>
+            <Ionicons name="heart" size={20} color={colors.primary} />
           </View>
           <Text style={styles.cardContent}>{card.content}</Text>
+          <View style={[styles.cardDecoration, styles.cardDecorationBottom]}>
+            <Ionicons name="heart" size={20} color={colors.primary} />
+          </View>
         </View>
 
-        <View style={styles.instructionCard}>
-          <Ionicons name="people" size={24} color={colors.accent} />
-          <Text style={styles.instructionText}>
-            Prenez le temps d'écouter chaque membre de la famille
-          </Text>
+        <View style={styles.cardMessageContainer}>
+          <Ionicons name="people" size={20} color={colors.accent} />
+          <Text style={styles.cardMessageText}>{message}</Text>
         </View>
       </ScrollView>
 
@@ -385,14 +459,40 @@ function GameStepContent({
 
 // Letters Game (C'est quali)
 function LettersGame() {
+  const [revealed, setRevealed] = useState(false);
   const [letters] = useState(() => {
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const randomLetters = [];
+    const availableLetters = alphabet.split('');
+    const randomLetters: string[] = [];
+    // Ensure unique letters
     for (let i = 0; i < 4; i++) {
-      randomLetters.push(alphabet[Math.floor(Math.random() * alphabet.length)]);
+      const randomIndex = Math.floor(Math.random() * availableLetters.length);
+      randomLetters.push(availableLetters[randomIndex]);
+      availableLetters.splice(randomIndex, 1);
     }
     return randomLetters;
   });
+
+  if (!revealed) {
+    return (
+      <>
+        <View style={styles.gameStartContainer}>
+          <Ionicons name="dice" size={80} color={colors.primary} />
+          <Text style={styles.gameStartText}>
+            Prêt à découvrir les 4 lettres ?
+          </Text>
+          <TouchableOpacity
+            style={styles.gameStartButton}
+            onPress={() => setRevealed(true)}
+            testID="start-letters-button"
+          >
+            <Text style={styles.gameStartButtonText}>Démarrer</Text>
+            <Ionicons name="play" size={20} color={colors.textWhite} />
+          </TouchableOpacity>
+        </View>
+      </>
+    );
+  }
 
   return (
     <>
@@ -415,61 +515,87 @@ function LettersGame() {
 
 // True/False Game
 function TrueFalseGame({ data }: { data?: any }) {
-  const [answers, setAnswers] = useState<{ [key: number]: boolean | null }>({});
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [userAnswer, setUserAnswer] = useState<boolean | null>(null);
   const statements = data?.statements || [];
+  const currentStatement = statements[currentIndex];
 
-  const handleAnswer = (index: number, answer: boolean) => {
-    setAnswers({ ...answers, [index]: answer });
+  const handleAnswer = (answer: boolean) => {
+    setUserAnswer(answer);
   };
+
+  const handleNextStatement = () => {
+    if (currentIndex < statements.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+      setUserAnswer(null);
+    }
+  };
+
+  if (!currentStatement) return null;
+
+  const isRevealed = userAnswer !== null;
+  const isCorrect = userAnswer === currentStatement.answer;
+  const isLast = currentIndex === statements.length - 1;
 
   return (
     <View style={styles.gameContent}>
-      {statements.map((statement: any, index: number) => {
-        const userAnswer = answers[index];
-        const isRevealed = userAnswer !== undefined && userAnswer !== null;
-        const isCorrect = userAnswer === statement.answer;
-        
-        return (
-          <View key={index} style={styles.tfCard}>
-            <Text style={styles.tfText}>{statement.text}</Text>
-            <View style={styles.tfButtonsContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.tfButton,
-                  userAnswer === true && (isCorrect ? styles.tfButtonCorrect : styles.tfButtonWrong),
-                ]}
-                onPress={() => handleAnswer(index, true)}
-              >
-                <Ionicons name="checkmark" size={20} color={colors.textWhite} />
-                <Text style={styles.tfButtonText}>Vrai</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.tfButton,
-                  styles.tfButtonFalse,
-                  userAnswer === false && (isCorrect ? styles.tfButtonCorrect : styles.tfButtonWrong),
-                ]}
-                onPress={() => handleAnswer(index, false)}
-              >
-                <Ionicons name="close" size={20} color={colors.textWhite} />
-                <Text style={styles.tfButtonText}>Faux</Text>
-              </TouchableOpacity>
-            </View>
-            {isRevealed && (
-              <View style={styles.tfResult}>
-                <Ionicons
-                  name={isCorrect ? 'checkmark-circle' : 'information-circle'}
-                  size={20}
-                  color={isCorrect ? colors.success : colors.info}
-                />
-                <Text style={styles.tfResultText}>
-                  {isCorrect ? 'Bonne réponse !' : `La réponse était : ${statement.answer ? 'Vrai' : 'Faux'}`}
-                </Text>
-              </View>
-            )}
+      <View style={styles.progressIndicator}>
+        <Text style={styles.progressText}>
+          Affirmation {currentIndex + 1} sur {statements.length}
+        </Text>
+      </View>
+      
+      <View style={styles.tfCard}>
+        <Text style={styles.tfText}>{currentStatement.text}</Text>
+        <View style={styles.tfButtonsContainer}>
+          <TouchableOpacity
+            style={[
+              styles.tfButton,
+              userAnswer === true && (isCorrect ? styles.tfButtonCorrect : styles.tfButtonWrong),
+            ]}
+            onPress={() => handleAnswer(true)}
+            disabled={isRevealed}
+          >
+            <Ionicons name="checkmark" size={20} color={colors.textWhite} />
+            <Text style={styles.tfButtonText}>Vrai</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.tfButton,
+              styles.tfButtonFalse,
+              userAnswer === false && (isCorrect ? styles.tfButtonCorrect : styles.tfButtonWrong),
+            ]}
+            onPress={() => handleAnswer(false)}
+            disabled={isRevealed}
+          >
+            <Ionicons name="close" size={20} color={colors.textWhite} />
+            <Text style={styles.tfButtonText}>Faux</Text>
+          </TouchableOpacity>
+        </View>
+        {isRevealed && (
+          <View style={styles.tfResult}>
+            <Ionicons
+              name={isCorrect ? 'checkmark-circle' : 'information-circle'}
+              size={20}
+              color={isCorrect ? colors.success : colors.info}
+            />
+            <Text style={styles.tfResultText}>
+              {isCorrect ? 'Bonne réponse !' : `La réponse était : ${currentStatement.answer ? 'Vrai' : 'Faux'}`}
+            </Text>
           </View>
-        );
-      })}
+        )}
+      </View>
+      
+      {isRevealed && !isLast && (
+        <TouchableOpacity
+          style={styles.tfNextButton}
+          onPress={handleNextStatement}
+          testID="tf-next-button"
+        >
+          <Text style={styles.tfNextButtonText}>Suivant</Text>
+          <Ionicons name="arrow-forward" size={18} color={colors.textWhite} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -600,11 +726,13 @@ function CustomGame() {
 function ClosingStepContent({
   closingWord,
   setClosingWord,
+  error,
   onComplete,
   isCompleting,
 }: {
   closingWord: string;
   setClosingWord: (text: string) => void;
+  error: string;
   onComplete: () => void;
   isCompleting: boolean;
 }) {
@@ -620,15 +748,24 @@ function ClosingStepContent({
         </View>
 
         <TextInput
-          style={styles.closingInput}
+          style={[styles.closingInput, error && styles.closingInputError]}
           placeholder="Écrivez votre mot ici..."
           placeholderTextColor={colors.textSecondary}
           value={closingWord}
-          onChangeText={setClosingWord}
+          onChangeText={(text) => {
+            setClosingWord(text);
+          }}
           multiline
           maxLength={200}
           autoFocus
         />
+
+        {error ? (
+          <View style={styles.closingErrorContainer}>
+            <Ionicons name="warning" size={18} color={colors.error} />
+            <Text style={styles.closingErrorText}>{error}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.instructionCard}>
           <Ionicons name="heart" size={24} color={colors.accent} />
@@ -642,6 +779,7 @@ function ClosingStepContent({
         style={[styles.continueButton, isCompleting && styles.buttonDisabled]}
         onPress={onComplete}
         disabled={isCompleting}
+        testID="close-session-button"
       >
         {isCompleting ? (
           <ActivityIndicator color={colors.textWhite} />
@@ -660,10 +798,18 @@ function ClosingStepContent({
 function CelebrationStepContent({
   mopadoEarned,
   alreadyCompleted,
+  rewardMessage,
+  closingMessage,
+  badgesEarned,
+  hasBonusMission,
   onFinish,
 }: {
   mopadoEarned: number;
   alreadyCompleted: boolean;
+  rewardMessage: string;
+  closingMessage: string;
+  badgesEarned: string[];
+  hasBonusMission: boolean;
   onFinish: () => void;
 }) {
   return (
@@ -690,17 +836,65 @@ function CelebrationStepContent({
           <View style={styles.rewardCard}>
             <Ionicons name="cash" size={48} color={colors.primary} />
             <Text style={styles.rewardAmount}>+{mopadoEarned} Mopado$</Text>
+            {rewardMessage ? (
+              <Text style={styles.rewardMessageText}>{rewardMessage}</Text>
+            ) : null}
+          </View>
+        )}
+        
+        {/* Badges earned */}
+        {badgesEarned && badgesEarned.length > 0 && (
+          <View style={styles.badgeEarnedCard}>
+            <Ionicons name="medal" size={40} color={colors.gold} />
+            <Text style={styles.badgeEarnedTitle}>Nouveau badge !</Text>
+            {badgesEarned.map((badge, i) => (
+              <Text key={i} style={styles.badgeEarnedName}>{badge}</Text>
+            ))}
           </View>
         )}
 
         <View style={styles.celebrationMessage}>
           <Ionicons name="heart" size={32} color={colors.accent} />
           <Text style={styles.celebrationText}>
-            Un moment précieux passé ensemble. Rendez-vous la semaine prochaine !
+            {closingMessage}
           </Text>
         </View>
       </ScrollView>
 
+      <TouchableOpacity style={styles.continueButton} onPress={onFinish}>
+        <Text style={styles.continueButtonText}>
+          {hasBonusMission ? 'Voir la mission bonus' : "Retour à l'accueil"}
+        </Text>
+        <Ionicons name={hasBonusMission ? 'gift' : 'home'} size={20} color={colors.textWhite} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// Bonus Mission Step
+function BonusMissionStepContent({
+  mission,
+  onFinish,
+}: {
+  mission: string;
+  onFinish: () => void;
+}) {
+  return (
+    <View style={styles.stepContainer}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, styles.celebrationContent]}>
+        <Ionicons name="gift" size={80} color={colors.primary} />
+        <Text style={styles.bonusMissionTitle}>Mission bonus de la semaine</Text>
+        <View style={styles.bonusMissionCard}>
+          <Ionicons name="sparkles" size={32} color={colors.gold} style={{ marginBottom: 12 }} />
+          <Text style={styles.bonusMissionText}>{mission}</Text>
+        </View>
+        <View style={styles.celebrationMessage}>
+          <Ionicons name="star" size={24} color={colors.accent} />
+          <Text style={styles.celebrationText}>
+            À bientôt pour partager cette mission ensemble !
+          </Text>
+        </View>
+      </ScrollView>
       <TouchableOpacity style={styles.continueButton} onPress={onFinish}>
         <Text style={styles.continueButtonText}>Retour à l'accueil</Text>
         <Ionicons name="home" size={20} color={colors.textWhite} />
@@ -832,21 +1026,168 @@ const styles = StyleSheet.create({
   },
   cardContainer: {
     backgroundColor: colors.background,
-    borderRadius: 16,
+    borderRadius: 24,
     padding: 32,
     alignItems: 'center',
-    marginBottom: 24,
-    minHeight: 300,
+    marginBottom: 20,
+    minHeight: 280,
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.primaryLight,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  cardDecoration: {
+    marginBottom: 16,
+  },
+  cardDecorationBottom: {
+    marginBottom: 0,
+    marginTop: 16,
   },
   cardIcon: {
     marginBottom: 24,
   },
   cardContent: {
-    fontSize: 20,
+    fontSize: 22,
     color: colors.text,
     textAlign: 'center',
     lineHeight: 32,
+    fontWeight: '500',
+    fontStyle: 'italic',
+  },
+  cardMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundTertiary,
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+  },
+  cardMessageText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  gameStartContainer: {
+    alignItems: 'center',
+    padding: 24,
+    gap: 20,
+  },
+  gameStartText: {
+    fontSize: 18,
+    color: colors.text,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  gameStartButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  gameStartButtonText: {
+    color: colors.textWhite,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  tfNextButton: {
+    backgroundColor: colors.secondary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    alignSelf: 'center',
+    marginTop: 8,
+  },
+  tfNextButtonText: {
+    color: colors.textWhite,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  closingInputError: {
+    borderWidth: 2,
+    borderColor: colors.error,
+  },
+  closingErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fee',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  closingErrorText: {
+    color: colors.error,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  rewardMessageText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  badgeEarnedCard: {
+    backgroundColor: colors.gold + '20',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    marginTop: 16,
+    width: '100%',
+    borderWidth: 2,
+    borderColor: colors.gold,
+  },
+  badgeEarnedTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.gold,
+    marginTop: 8,
+  },
+  badgeEarnedName: {
+    fontSize: 16,
+    color: colors.text,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  bonusMissionTitle: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  bonusMissionCard: {
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    marginTop: 16,
+    borderWidth: 2,
+    borderColor: colors.accent,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+    width: '100%',
+  },
+  bonusMissionText: {
+    fontSize: 18,
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 26,
     fontWeight: '500',
   },
   gameHeader: {

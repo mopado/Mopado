@@ -115,8 +115,15 @@ class Episode(BaseModel):
     video_filename: Optional[str] = None
     order: int
     cards: List[Card] = []
+    cards_message: Optional[str] = "On répond chacun son tour."
+    cards_after_game: List[Card] = []
     mini_game: Optional[MiniGame] = None
     mopado_reward: int = 5
+    reward_message: Optional[str] = "Merci pour ce beau moment ensemble !"
+    bonus_mission: Optional[str] = None
+    closing_message: Optional[str] = "Rendez-vous la semaine prochaine pour un nouveau moment qui compte, ensemble !"
+    badge_name: Optional[str] = None
+    badge_description: Optional[str] = None
 
 class EpisodeCreate(BaseModel):
     season_id: str
@@ -125,8 +132,15 @@ class EpisodeCreate(BaseModel):
     video_filename: Optional[str] = None
     order: int
     cards: List[Card] = []
+    cards_message: Optional[str] = "On répond chacun son tour."
+    cards_after_game: List[Card] = []
     mini_game: Optional[MiniGame] = None
     mopado_reward: int = 5
+    reward_message: Optional[str] = "Merci pour ce beau moment ensemble !"
+    bonus_mission: Optional[str] = None
+    closing_message: Optional[str] = "Rendez-vous la semaine prochaine pour un nouveau moment qui compte, ensemble !"
+    badge_name: Optional[str] = None
+    badge_description: Optional[str] = None
 
 # Session Models
 class SessionStart(BaseModel):
@@ -447,18 +461,34 @@ async def complete_session(session_id: str, data: SessionComplete):
             }
         
         # First time completing this episode - give rewards
+        badges_earned = []
+        if episode and episode.get("badge_name"):
+            badge_name = episode["badge_name"]
+            # Check if user already has this badge
+            if badge_name not in user.get("badges", []):
+                badges_earned.append(badge_name)
+        
+        update_ops = {
+            "$inc": {"mopado_dollars": mopado_reward},
+            "$addToSet": {"completed_episodes": episode_id}
+        }
+        
+        if badges_earned:
+            update_ops["$addToSet"]["badges"] = {"$each": badges_earned}
+        
         await db.users.update_one(
             {"_id": ObjectId(family_id)},
-            {
-                "$inc": {"mopado_dollars": mopado_reward},
-                "$addToSet": {"completed_episodes": episode_id}
-            }
+            update_ops
         )
         
         return {
             "message": "Session completed",
             "mopado_earned": mopado_reward,
-            "already_completed": False
+            "already_completed": False,
+            "badges_earned": badges_earned,
+            "reward_message": episode.get("reward_message", "Merci pour ce beau moment ensemble !") if episode else "Merci pour ce beau moment ensemble !",
+            "bonus_mission": episode.get("bonus_mission") if episode else None,
+            "closing_message": episode.get("closing_message", "Rendez-vous la semaine prochaine pour un nouveau moment qui compte, ensemble !") if episode else "Rendez-vous la semaine prochaine pour un nouveau moment qui compte, ensemble !"
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -79,14 +79,11 @@ export default function HomeScreen() {
               foundEpisode = uncompletedEpisode;
               foundSeasonId = season.id;
               break;
-            } else if (episodesData.length > 0 && !foundEpisode) {
-              // If all episodes are completed, show the last one
-              foundEpisode = episodesData[episodesData.length - 1];
-              foundSeasonId = season.id;
             }
           }
         }
         
+        // If all episodes are completed, foundEpisode stays null (no episode shown)
         setCurrentEpisode(foundEpisode);
         setCurrentSeasonId(foundSeasonId);
       }
@@ -178,10 +175,21 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={styles.startButton}
                 onPress={handleStartSession}
+                testID="start-episode-button"
               >
                 <Text style={styles.startButtonText}>Commencer</Text>
                 <Ionicons name="arrow-forward" size={20} color={colors.textWhite} />
               </TouchableOpacity>
+            </View>
+          </View>
+        ) : seasons.length > 0 ? (
+          <View style={styles.episodeSection}>
+            <View style={styles.allCompletedCard}>
+              <Ionicons name="checkmark-circle" size={64} color={colors.success} />
+              <Text style={styles.allCompletedTitle}>Tous les épisodes sont terminés !</Text>
+              <Text style={styles.allCompletedText}>
+                Bravo à toute la famille ! Consultez la bibliothèque pour revoir vos épisodes ou attendez le prochain !
+              </Text>
             </View>
           </View>
         ) : null}
@@ -308,6 +316,28 @@ const styles = StyleSheet.create({
   },
   episodeSection: {
     marginBottom: 24,
+  },
+  allCompletedCard: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.success,
+  },
+  allCompletedTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  allCompletedText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
   },
   sectionTitle: {
     fontSize: 20,

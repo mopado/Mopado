@@ -356,6 +356,10 @@
 Qu'as-tu aimé dans ce moment ?"></textarea>
                     </div>
                     <div class="form-group">
+                        <label>Message sous les cartes</label>
+                        <input type="text" id="episode-cards-message" value="On répond chacun son tour." placeholder="On répond chacun son tour.">
+                    </div>
+                    <div class="form-group">
                         <label>Mini-jeu - Type</label>
                         <select id="episode-game-type" onchange="updateGameTypeFields()">
                             <option value="">Pas de mini-jeu</option>
@@ -413,13 +417,39 @@ Comment exprimer ses émotions ? | En se cachant | En parlant | En criant | 1"><
                     <div id="letters-fields" class="game-type-fields" style="display: none;">
                         <div class="form-group">
                             <p style="color: #7F8C8D; padding: 12px; background: #FFF5EB; border-radius: 8px;">
-                                📝 Le jeu tirera automatiquement 4 lettres aléatoires. Les participants devront trouver une qualité pour chaque lettre.
+                                📝 Le jeu tirera automatiquement 4 lettres aléatoires différentes. Les participants devront trouver une qualité pour chaque lettre.
                             </p>
                         </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Cartes après le mini-jeu (optionnel, une par ligne)</label>
+                        <textarea id="episode-cards-after" placeholder="Quel a été ton moment préféré ?
+Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
                     </div>
                     <div class="form-group">
                         <label>Récompense Mopado$ *</label>
                         <input type="number" id="episode-reward" value="5" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Message de récompense (accompagne les +Mopado$)</label>
+                        <input type="text" id="episode-reward-message" value="Merci pour ce beau moment ensemble !" placeholder="Merci pour ce beau moment ensemble !">
+                    </div>
+                    <div class="form-group">
+                        <label>Mission bonus de la semaine (optionnel)</label>
+                        <textarea id="episode-bonus-mission" placeholder="Ex: Cette semaine, trouve une situation où tu as utilisé une de tes qualités."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Message de clôture</label>
+                        <input type="text" id="episode-closing-message" value="Rendez-vous la semaine prochaine pour un nouveau moment qui compte, ensemble !" placeholder="Message de fin">
+                    </div>
+                    <div class="form-group">
+                        <label>Badge débloqué (nom) - optionnel</label>
+                        <input type="text" id="episode-badge-name" placeholder="Ex: Explorateur de qualités">
+                    </div>
+                    <div class="form-group">
+                        <label>Badge - Description (optionnel)</label>
+                        <input type="text" id="episode-badge-description" placeholder="Ex: Vous avez découvert vos qualités en famille">
                     </div>
                     <button type="submit" class="btn btn-primary">Créer l'épisode</button>
                 </form>
@@ -744,6 +774,12 @@ Comment exprimer ses émotions ? | En se cachant | En parlant | En criant | 1"><
                 content: content.trim()
             }));
             
+            const cardsAfterText = document.getElementById('episode-cards-after').value;
+            const cardsAfterGame = cardsAfterText.split('\n').filter(line => line.trim()).map(content => ({
+                type: 'question',
+                content: content.trim()
+            }));
+            
             const miniGame = buildMiniGameData();
             
             const data = {
@@ -753,8 +789,15 @@ Comment exprimer ses émotions ? | En se cachant | En parlant | En criant | 1"><
                 order: parseInt(document.getElementById('episode-order').value),
                 video_filename: videoFilename,
                 cards: cards,
+                cards_message: document.getElementById('episode-cards-message').value || "On répond chacun son tour.",
+                cards_after_game: cardsAfterGame,
                 mini_game: miniGame,
-                mopado_reward: parseInt(document.getElementById('episode-reward').value)
+                mopado_reward: parseInt(document.getElementById('episode-reward').value),
+                reward_message: document.getElementById('episode-reward-message').value || "Merci pour ce beau moment ensemble !",
+                bonus_mission: document.getElementById('episode-bonus-mission').value || null,
+                closing_message: document.getElementById('episode-closing-message').value || "Rendez-vous la semaine prochaine pour un nouveau moment qui compte, ensemble !",
+                badge_name: document.getElementById('episode-badge-name').value || null,
+                badge_description: document.getElementById('episode-badge-description').value || null
             };
             
             try {
