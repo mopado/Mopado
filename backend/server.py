@@ -503,6 +503,12 @@ async def admin_page():
     with open(admin_path, "r", encoding="utf-8") as f:
         return f.read()
 
+@api_router.get("/admin-panel", response_class=HTMLResponse)
+async def admin_panel():
+    admin_path = ROOT_DIR / "admin.html"
+    with open(admin_path, "r", encoding="utf-8") as f:
+        return f.read()
+
 # Include router
 app.include_router(api_router)
 
