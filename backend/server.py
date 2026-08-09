@@ -382,6 +382,14 @@ async def complete_session(session_id: str, data: SessionComplete):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
+        # Check if this session is already completed (prevent duplicate rewards)
+        if session.get("completed"):
+            return {
+                "message": "Session already completed",
+                "mopado_earned": 0,
+                "already_completed": True
+            }
+        
         # Calculate time spent
         start_time = session.get("start_time", datetime.utcnow())
         time_spent = int((datetime.utcnow() - start_time).total_seconds())
@@ -400,10 +408,20 @@ async def complete_session(session_id: str, data: SessionComplete):
         episode = await db.episodes.find_one({"_id": ObjectId(session["episode_id"])})
         mopado_reward = episode.get("mopado_reward", 5) if episode else 5
         
-        # Update user progress
+        # Check if user has already completed this episode (prevent duplicate rewards)
         family_id = session["family_id"]
         episode_id = session["episode_id"]
         
+        user = await db.users.find_one({"_id": ObjectId(family_id)})
+        if user and episode_id in user.get("completed_episodes", []):
+            # Episode already completed before - don't give rewards again
+            return {
+                "message": "Session completed (episode already completed before)",
+                "mopado_earned": 0,
+                "already_completed": True
+            }
+        
+        # First time completing this episode - give rewards
         await db.users.update_one(
             {"_id": ObjectId(family_id)},
             {
@@ -414,7 +432,8 @@ async def complete_session(session_id: str, data: SessionComplete):
         
         return {
             "message": "Session completed",
-            "mopado_earned": mopado_reward
+            "mopado_earned": mopado_reward,
+            "already_completed": False
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

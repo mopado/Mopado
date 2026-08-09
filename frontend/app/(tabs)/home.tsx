@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { colors } from '@/src/theme/colors';
@@ -35,6 +35,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(null);
+  const [currentSeasonId, setCurrentSeasonId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -42,29 +43,53 @@ export default function HomeScreen() {
     loadData();
   }, []);
 
+  // Reload data when screen is focused (e.g., returning from session)
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
+
   const loadData = async () => {
     try {
+      await refreshUser();
+      
       // Load seasons
       const seasonsResponse = await fetch(`${BACKEND_URL}/api/seasons`);
       if (seasonsResponse.ok) {
         const seasonsData = await seasonsResponse.json();
         setSeasons(seasonsData);
 
-        // Load first episode of first season as "current"
-        if (seasonsData.length > 0) {
+        // Find first uncompleted episode across all seasons
+        let foundEpisode: Episode | null = null;
+        let foundSeasonId: string | null = null;
+        
+        for (const season of seasonsData) {
           const episodesResponse = await fetch(
-            `${BACKEND_URL}/api/episodes/season/${seasonsData[0].id}`
+            `${BACKEND_URL}/api/episodes/season/${season.id}`
           );
           if (episodesResponse.ok) {
             const episodesData = await episodesResponse.json();
-            if (episodesData.length > 0) {
-              setCurrentEpisode(episodesData[0]);
+            // Find first episode not yet completed
+            const uncompletedEpisode = episodesData.find(
+              (ep: Episode) => !user?.completed_episodes?.includes(ep.id)
+            );
+            
+            if (uncompletedEpisode) {
+              foundEpisode = uncompletedEpisode;
+              foundSeasonId = season.id;
+              break;
+            } else if (episodesData.length > 0 && !foundEpisode) {
+              // If all episodes are completed, show the last one
+              foundEpisode = episodesData[episodesData.length - 1];
+              foundSeasonId = season.id;
             }
           }
         }
+        
+        setCurrentEpisode(foundEpisode);
+        setCurrentSeasonId(foundSeasonId);
       }
-
-      await refreshUser();
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -79,8 +104,8 @@ export default function HomeScreen() {
   };
 
   const handleStartSession = () => {
-    if (currentEpisode && seasons.length > 0) {
-      router.push(`/session/${currentEpisode.id}?seasonId=${seasons[0].id}`);
+    if (currentEpisode && currentSeasonId) {
+      router.push(`/session/${currentEpisode.id}?seasonId=${currentSeasonId}`);
     }
   };
 
@@ -116,8 +141,12 @@ export default function HomeScreen() {
               <Ionicons name="star" size={16} color={colors.gold} />
               <Text style={styles.seasonBadgeText}>Saison en cours</Text>
             </View>
-            <Text style={styles.seasonTitle}>{seasons[0].name}</Text>
-            <Text style={styles.seasonDescription}>{seasons[0].description}</Text>
+            <Text style={styles.seasonTitle}>
+              {seasons.find(s => s.id === currentSeasonId)?.name || seasons[0].name}
+            </Text>
+            <Text style={styles.seasonDescription}>
+              {seasons.find(s => s.id === currentSeasonId)?.description || seasons[0].description}
+            </Text>
           </View>
         ) : (
           <View style={styles.emptyCard}>

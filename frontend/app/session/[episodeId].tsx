@@ -57,6 +57,7 @@ export default function SessionScreen() {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [closingWord, setClosingWord] = useState('');
   const [mopadoEarned, setMopadoEarned] = useState(0);
+  const [alreadyCompleted, setAlreadyCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isCompleting, setIsCompleting] = useState(false);
 
@@ -154,6 +155,7 @@ export default function SessionScreen() {
       if (response.ok) {
         const data = await response.json();
         setMopadoEarned(data.mopado_earned);
+        setAlreadyCompleted(data.already_completed || false);
         await refreshUser();
         setCurrentStep('celebration');
       } else {
@@ -231,6 +233,7 @@ export default function SessionScreen() {
       {currentStep === 'celebration' && (
         <CelebrationStepContent
           mopadoEarned={mopadoEarned}
+          alreadyCompleted={alreadyCompleted}
           onFinish={handleExit}
         />
       )}
@@ -450,9 +453,11 @@ function ClosingStepContent({
 // Celebration Step Component
 function CelebrationStepContent({
   mopadoEarned,
+  alreadyCompleted,
   onFinish,
 }: {
   mopadoEarned: number;
+  alreadyCompleted: boolean;
   onFinish: () => void;
 }) {
   return (
@@ -465,10 +470,22 @@ function CelebrationStepContent({
           Vous avez terminé votre moment Mopado
         </Text>
 
-        <View style={styles.rewardCard}>
-          <Ionicons name="cash" size={48} color={colors.primary} />
-          <Text style={styles.rewardAmount}>+{mopadoEarned} Mopado$</Text>
-        </View>
+        {alreadyCompleted ? (
+          <View style={styles.rewardCard}>
+            <Ionicons name="information-circle" size={48} color={colors.info} />
+            <Text style={styles.alreadyCompletedText}>
+              Épisode déjà complété
+            </Text>
+            <Text style={styles.alreadyCompletedSubtext}>
+              Vous avez déjà gagné les Mopado$ pour cet épisode
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.rewardCard}>
+            <Ionicons name="cash" size={48} color={colors.primary} />
+            <Text style={styles.rewardAmount}>+{mopadoEarned} Mopado$</Text>
+          </View>
+        )}
 
         <View style={styles.celebrationMessage}>
           <Ionicons name="heart" size={32} color={colors.accent} />
@@ -713,6 +730,19 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.primary,
     marginTop: 12,
+  },
+  alreadyCompletedText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.info,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  alreadyCompletedSubtext: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 8,
+    textAlign: 'center',
   },
   celebrationMessage: {
     flexDirection: 'row',
