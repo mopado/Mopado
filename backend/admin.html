@@ -341,7 +341,7 @@
                             <input type="file" id="episode-video" accept="video/*">
                             <span class="file-name" id="video-file-name">Aucun fichier choisi</span>
                         </div>
-                        <p style="color: #7F8C8D; font-size: 12px; margin-top: 8px;">Format: MP4, max 50MB</p>
+                        <p style="color: #7F8C8D; font-size: 12px; margin-top: 8px;">Format: MP4, max 200MB</p>
                     </div>
                     <div class="form-group">
                         <label>Cartes d'échange (une par ligne)</label>
@@ -513,10 +513,15 @@ Qu'as-tu aimé dans ce moment ?"></textarea>
             let videoBase64 = null;
             
             if (videoFile) {
-                if (videoFile.size > 50 * 1024 * 1024) {
-                    showAlert('episode-alert', 'La vidéo est trop grande (max 50MB)', 'error');
+                if (videoFile.size > 200 * 1024 * 1024) {
+                    showAlert('episode-alert', 'La vidéo est trop grande (max 200MB)', 'error');
                     return;
                 }
+                
+                // Show loading message for large files
+                const sizeInMB = (videoFile.size / (1024 * 1024)).toFixed(2);
+                showAlert('episode-alert', `Upload de la vidéo en cours (${sizeInMB} MB)... Cela peut prendre quelques minutes.`, 'success');
+                
                 videoBase64 = await fileToBase64(videoFile);
             }
             
@@ -546,6 +551,8 @@ Qu'as-tu aimé dans ce moment ?"></textarea>
             };
             
             try {
+                showAlert('episode-alert', 'Création de l\'épisode en cours...', 'success');
+                
                 const response = await fetch(`${API_URL}/episodes`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -559,7 +566,8 @@ Qu'as-tu aimé dans ce moment ?"></textarea>
                     loadEpisodes();
                     loadStats();
                 } else {
-                    showAlert('episode-alert', 'Erreur lors de la création', 'error');
+                    const errorData = await response.json();
+                    showAlert('episode-alert', 'Erreur lors de la création: ' + (errorData.detail || 'Erreur inconnue'), 'error');
                 }
             } catch (error) {
                 showAlert('episode-alert', 'Erreur: ' + error.message, 'error');
