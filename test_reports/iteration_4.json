@@ -1,0 +1,35 @@
+{
+  "summary": "Verified the _id leak bug fix in /app/backend/server.py. New clean_doc() helper correctly strips MongoDB '_id' and injects 'id' as string across GET /api/seasons (list + by id), GET /api/episodes/season/{id}, GET /api/episodes/{id}, GET /api/sessions/family/{id}, and GET /api/badges. Created /app/backend/tests/test_id_leak_fix.py with 18 targeted assertions: 6 verify no '_id' leak across all affected endpoints, 3 verify pre-seeded episodes (true_false 6a78ef64fa41837ea9ac064f, ranking 6a78ef64fa41837ea9ac0650, quiz 6a78ef64fa41837ea9ac0651) still return correct mini_game.type without _id, 5 regression tests re-create+GET episodes for every mini-game type (letters, true_false, ranking, quiz, custom) confirming type and data payload are preserved, and 4 regression tests cover auth/login, family profile, progress, and admin stats. Also re-ran the two prior suites (test_mopado_bugs.py, test_minigame_types.py) — 20/20 passing. Grand total: 38/38 backend tests passing (100%). The pre-existing _id leak that was the sole failure in iteration_3 is now fully resolved.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/forgot-password", "issue": "Parameter typed as body 'email: EmailStr' — pre-existing, out of scope for this fix."},
+      {"endpoint": "POST /api/episodes (mini_game.data)", "issue": "MiniGame.data is a free-form Dict[str, Any]; no per-type validation for quiz correct-index bounds, statements shape, etc. Pre-existing."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_id_leak_fix.py",
+    "/app/test_reports/pytest/pytest_id_leak_fix.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "clean_doc() implementation is clean and idempotent: pops '_id' via dict comprehension and adds 'id' as string; also recursively str_object_id()s nested ObjectId values — good.",
+    "clean_doc handles None/empty dicts safely (returns as-is).",
+    "server.py is still at ~638 lines. Recommend splitting into domain modules (auth, seasons, episodes, sessions, badges, videos) before it crosses 700."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_id_leak_fix.py (new)"
+  ],
+  "success_rate": {"backend": "100% (38/38)", "frontend": "N/A - backend only"},
+  "seed_data_creation": "5 TEST_ episodes + 1 TEST_ season created and deleted in-run via class-scoped teardown. No leftover data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend URL: https://mopado-family-1.preview.emergentagent.com. Test user famille.test@mopado.fr / test123. Seeded episodes intact: 6a78ef64fa41837ea9ac064f (true_false), 6a78ef64fa41837ea9ac0650 (ranking), 6a78ef64fa41837ea9ac0651 (quiz). Season 6a78e7a45f87998d7ed8e2c3. _id leak bug fixed via clean_doc() helper — no regression expected. All backend suites green.",
+  "rca_of_issue": "N/A — verification-only run. Fix RCA: main agent added clean_doc(doc) which excludes '_id' via dict comprehension and adds 'id' = str(doc['_id']), then recursively serializes remaining ObjectIds. Applied to all six previously leaking endpoints. Verified all responses now expose only 'id' (never '_id')."
+}

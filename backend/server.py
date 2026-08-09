@@ -50,6 +50,16 @@ def str_object_id(obj):
         return [str_object_id(item) for item in obj]
     return obj
 
+def clean_doc(doc):
+    """Remove _id from MongoDB doc and add id as string."""
+    if not doc:
+        return doc
+    doc_id = str(doc.get("_id")) if "_id" in doc else None
+    result = {k: v for k, v in doc.items() if k != "_id"}
+    if doc_id:
+        result["id"] = doc_id
+    return str_object_id(result)
+
 # ==================== MODELS ====================
 
 # User/Family Models
@@ -285,7 +295,7 @@ async def update_family_profile(user_id: str, profile: dict):
 @api_router.get("/seasons")
 async def get_seasons():
     seasons = await db.seasons.find().sort("order", 1).to_list(100)
-    return [str_object_id({**s, "id": str(s["_id"])}) for s in seasons]
+    return [clean_doc(s) for s in seasons]
 
 @api_router.get("/seasons/{season_id}")
 async def get_season(season_id: str):
@@ -293,7 +303,7 @@ async def get_season(season_id: str):
         season = await db.seasons.find_one({"_id": ObjectId(season_id)})
         if not season:
             raise HTTPException(status_code=404, detail="Season not found")
-        return str_object_id({**season, "id": str(season["_id"])})
+        return clean_doc(season)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -328,7 +338,7 @@ async def delete_season(season_id: str):
 @api_router.get("/episodes/season/{season_id}")
 async def get_episodes_by_season(season_id: str):
     episodes = await db.episodes.find({"season_id": season_id}).sort("order", 1).to_list(100)
-    return [str_object_id({**e, "id": str(e["_id"])}) for e in episodes]
+    return [clean_doc(e) for e in episodes]
 
 @api_router.get("/episodes/{episode_id}")
 async def get_episode(episode_id: str):
@@ -336,7 +346,7 @@ async def get_episode(episode_id: str):
         episode = await db.episodes.find_one({"_id": ObjectId(episode_id)})
         if not episode:
             raise HTTPException(status_code=404, detail="Episode not found")
-        return str_object_id({**episode, "id": str(episode["_id"])})
+        return clean_doc(episode)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -456,14 +466,14 @@ async def complete_session(session_id: str, data: SessionComplete):
 @api_router.get("/sessions/family/{family_id}")
 async def get_family_sessions(family_id: str):
     sessions = await db.sessions.find({"family_id": family_id}).sort("date", -1).to_list(100)
-    return [str_object_id({**s, "id": str(s["_id"])}) for s in sessions]
+    return [clean_doc(s) for s in sessions]
 
 # ==================== BADGE ROUTES ====================
 
 @api_router.get("/badges")
 async def get_badges():
     badges = await db.badges.find().to_list(100)
-    return [str_object_id({**b, "id": str(b["_id"])}) for b in badges]
+    return [clean_doc(b) for b in badges]
 
 @api_router.post("/badges")
 async def create_badge(badge: BadgeCreate):
