@@ -15,12 +15,19 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: #FFF5EB;
             color: #2C3E50;
+            -webkit-text-size-adjust: 100%;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 12px;
+        }
+
+        @media (min-width: 768px) {
+            .container {
+                padding: 20px;
+            }
         }
 
         header {
@@ -520,28 +527,45 @@ Qu'as-tu aimé dans ce moment ?"></textarea>
                 }
                 
                 const sizeInMB = (videoFile.size / (1024 * 1024)).toFixed(2);
-                showAlert('episode-alert', `Upload de la vidéo en cours (${sizeInMB} MB)... Cela peut prendre quelques minutes.`, 'success');
+                console.log(`Starting upload of video: ${videoFile.name}, size: ${sizeInMB} MB, type: ${videoFile.type}`);
+                showAlert('episode-alert', `Upload de la vidéo en cours (${sizeInMB} MB)... Cela peut prendre plusieurs minutes selon votre connexion. Ne fermez pas cette page.`, 'success');
                 
                 try {
                     const formData = new FormData();
                     formData.append('file', videoFile);
                     
+                    console.log('Sending POST to /upload/video...');
                     const uploadResponse = await fetch(`${API_URL}/upload/video`, {
                         method: 'POST',
                         body: formData
                     });
                     
+                    console.log(`Upload response status: ${uploadResponse.status}`);
+                    
                     if (!uploadResponse.ok) {
-                        const errorData = await uploadResponse.json();
-                        showAlert('episode-alert', 'Erreur upload vidéo: ' + (errorData.detail || 'Erreur inconnue'), 'error');
+                        let errorMsg = 'Erreur inconnue';
+                        try {
+                            const errorData = await uploadResponse.json();
+                            errorMsg = errorData.detail || errorMsg;
+                        } catch (e) {
+                            errorMsg = `HTTP ${uploadResponse.status}: ${uploadResponse.statusText}`;
+                        }
+                        console.error('Upload failed:', errorMsg);
+                        showAlert('episode-alert', 'Erreur upload vidéo: ' + errorMsg, 'error');
                         return;
                     }
                     
                     const uploadData = await uploadResponse.json();
                     videoFilename = uploadData.filename;
+                    console.log(`Upload successful: ${videoFilename}, ${uploadData.size_mb} MB`);
                     showAlert('episode-alert', `Vidéo uploadée (${uploadData.size_mb} MB). Création de l'épisode...`, 'success');
                 } catch (error) {
-                    showAlert('episode-alert', 'Erreur upload vidéo: ' + error.message, 'error');
+                    console.error('Upload error:', error);
+                    let errorMsg = error.message || 'Erreur réseau';
+                    if (error.name === 'TypeError' && errorMsg.includes('Failed to fetch')) {
+                        errorMsg = 'Connexion perdue ou timeout. Vérifiez votre connexion internet et réessayez.';
+                    }
+                    showAlert('episode-alert', 'Erreur upload vidéo: ' + errorMsg, 'error');
                     return;
                 }
             }
