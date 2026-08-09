@@ -1,0 +1,42 @@
+{
+  "summary": "Backend-only testing of the video upload fix for Mopado. All 13 pytest cases passed (100%). Verified: POST /api/upload/video accepts mp4 and webm (returns filename + size_mb), rejects non-video with 400 and message 'Type de fichier non supporté'; GET /api/videos/{filename} streams video/mp4 (404 for missing); Episode CRUD works with new video_filename field (no video_base64 in response); creating episode without video works (video_filename=null); DELETE /api/episodes/{id} removes the associated video file from filesystem; DELETE /api/videos/{filename} works and idempotently returns 404 the second time; GET /api/admin-panel serves HTML with the updated 500MB size limit mentioned.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/upload/video", "issue": "No server-side max file size enforcement. Admin UI advertises 500MB but server will accept larger files. Consider explicit size check to return 413."},
+      {"endpoint": "POST /api/upload/video, /api/videos/{filename}, DELETE /api/videos/{filename}", "issue": "No authentication/authorization. Anyone can upload/delete videos. Add admin auth guard."},
+      {"endpoint": "GET /api/videos/{filename}", "issue": "media_type is hardcoded to 'video/mp4' even when file is .webm/.mov/.avi. Should be derived from extension."},
+      {"endpoint": "GET /api/videos/{filename}", "issue": "No path traversal protection. filename like '../../etc/passwd' is not sanitized before joining with VIDEOS_DIR."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_video_upload.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: Enforce a server-side max upload size (e.g., 500MB) and return 413 with a clear message.",
+    "Optional: Add auth guard to upload/delete/admin endpoints — currently public.",
+    "Optional: Derive media_type from file extension for GET /api/videos/{filename} (mp4/webm/mov/avi) instead of hardcoding 'video/mp4'.",
+    "Optional: Sanitize filename in GET/DELETE /api/videos/{filename} to prevent path traversal (validate uuid or use Path().name)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 627 lines — approaching the 700-line split threshold; consider splitting routers by domain (auth, seasons, episodes, videos, admin).",
+    "Uses deprecated @app.on_event('shutdown'); migrate to FastAPI lifespan handler.",
+    "datetime.utcnow() is used broadly; consider datetime.now(timezone.utc) for future-proofing.",
+    "MongoDB _id handled correctly via str_object_id helper — no ObjectId leaks in responses.",
+    "Video file save uses chunked reads (1MB) — good for large files and matches the 500MB use case."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "N/A"},
+  "seed_data_creation": "Test episodes prefixed with TEST_ are created and cleaned up within the test suite (delete_episode calls). Two ephemeral videos uploaded (mp4, webm) and cleaned up (mp4 via episode delete cascade, webm via DELETE /api/videos).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend URL is EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env (https://mopado-family-1.preview.emergentagent.com). All video-upload bug-fix tests pass. Season ID used: 6a78e7a45f87998d7ed8e2c3. Test file: /app/backend/tests/test_video_upload.py.",
+  "rca_of_issue": "Original bug: episode creation failed when videos > 16MB because base64-encoded video was persisted inside the MongoDB episode document, exceeding the 16MB per-document BSON limit. Fix implemented: introduce POST /api/upload/video that streams uploads to /app/backend/uploads/videos/ as files, store only the filename on the Episode document (video_filename), and serve via GET /api/videos/{filename}. DELETE /api/episodes/{id} now also removes the associated file. Verified end-to-end via pytest — 13/13 pass."
+}

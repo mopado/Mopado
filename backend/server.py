@@ -1,11 +1,13 @@
-from fastapi import FastAPI, APIRouter, HTTPException, status
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi import FastAPI, APIRouter, HTTPException, status, UploadFile, File
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import uuid
+import shutil
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
@@ -17,6 +19,11 @@ from jwt.exceptions import InvalidTokenError
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Setup video upload directory
+UPLOADS_DIR = ROOT_DIR / "uploads"
+VIDEOS_DIR = UPLOADS_DIR / "videos"
+VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -94,7 +101,7 @@ class Episode(BaseModel):
     season_id: str
     title: str
     description: str
-    video_base64: Optional[str] = None
+    video_filename: Optional[str] = None
     order: int
     cards: List[Card] = []
     mini_game: Optional[MiniGame] = None
@@ -104,7 +111,7 @@ class EpisodeCreate(BaseModel):
     season_id: str
     title: str
     description: str
-    video_base64: Optional[str] = None
+    video_filename: Optional[str] = None
     order: int
     cards: List[Card] = []
     mini_game: Optional[MiniGame] = None
@@ -352,6 +359,13 @@ async def update_episode(episode_id: str, episode: EpisodeCreate):
 @api_router.delete("/episodes/{episode_id}")
 async def delete_episode(episode_id: str):
     try:
+        # Get episode to delete video file
+        episode = await db.episodes.find_one({"_id": ObjectId(episode_id)})
+        if episode and episode.get("video_filename"):
+            video_path = VIDEOS_DIR / episode["video_filename"]
+            if video_path.exists():
+                video_path.unlink()
+        
         await db.episodes.delete_one({"_id": ObjectId(episode_id)})
         return {"message": "Episode deleted"}
     except Exception as e:
@@ -498,6 +512,67 @@ async def get_family_progress(family_id: str):
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# ==================== VIDEO UPLOAD ROUTES ====================
+
+@api_router.post("/upload/video")
+async def upload_video(file: UploadFile = File(...)):
+    """Upload a video file and return the filename to be stored in episode."""
+    try:
+        # Validate file type
+        allowed_types = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"]
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Type de fichier non supporté. Formats acceptés: MP4, MOV, AVI, WebM"
+            )
+        
+        # Generate unique filename
+        file_extension = Path(file.filename).suffix if file.filename else ".mp4"
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = VIDEOS_DIR / unique_filename
+        
+        # Save file in chunks to handle large files
+        with open(file_path, "wb") as buffer:
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1MB chunks
+                if not chunk:
+                    break
+                buffer.write(chunk)
+        
+        file_size = file_path.stat().st_size
+        
+        return {
+            "filename": unique_filename,
+            "size_mb": round(file_size / (1024 * 1024), 2),
+            "message": "Vidéo uploadée avec succès"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'upload: {str(e)}")
+
+@api_router.get("/videos/{filename}")
+async def get_video(filename: str):
+    """Stream a video file."""
+    file_path = VIDEOS_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Vidéo non trouvée")
+    
+    return FileResponse(
+        path=str(file_path),
+        media_type="video/mp4",
+        filename=filename
+    )
+
+@api_router.delete("/videos/{filename}")
+async def delete_video(filename: str):
+    """Delete a video file."""
+    file_path = VIDEOS_DIR / filename
+    if file_path.exists():
+        file_path.unlink()
+        return {"message": "Vidéo supprimée"}
+    raise HTTPException(status_code=404, detail="Vidéo non trouvée")
 
 # ==================== ADMIN STATS ====================
 

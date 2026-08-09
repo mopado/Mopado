@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -38,7 +38,7 @@ interface Episode {
   season_id: string;
   title: string;
   description: string;
-  video_base64?: string;
+  video_filename?: string;
   cards: Card[];
   mini_game?: MiniGame;
   mopado_reward: number;
@@ -199,7 +199,7 @@ export default function SessionScreen() {
       {/* Video Step */}
       {currentStep === 'video' && (
         <VideoStepContent
-          videoBase64={episode.video_base64}
+          videoFilename={episode.video_filename}
           onNext={handleNextStep}
         />
       )}
@@ -243,25 +243,34 @@ export default function SessionScreen() {
 
 // Video Step Component
 function VideoStepContent({
-  videoBase64,
+  videoFilename,
   onNext,
 }: {
-  videoBase64?: string;
+  videoFilename?: string;
   onNext: () => void;
 }) {
-  const videoRef = useRef<any>(null);
+  const videoUrl = videoFilename
+    ? `${BACKEND_URL}/api/videos/${videoFilename}`
+    : null;
+
+  const player = useVideoPlayer(videoUrl, (player) => {
+    player.loop = false;
+    player.muted = false;
+  });
 
   return (
     <View style={styles.stepContainer}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.videoContainer}>
-          {videoBase64 ? (
-            <View style={styles.videoPlaceholder}>
-              <Ionicons name="videocam" size={64} color={colors.textWhite} />
-              <Text style={styles.videoPlaceholderText}>
-                Vidéo chargée ({Math.round(videoBase64.length / 1024)} KB)
-              </Text>
-            </View>
+          {videoUrl ? (
+            <VideoView
+              style={styles.video}
+              player={player}
+              allowsFullscreen
+              allowsPictureInPicture
+              contentFit="contain"
+              nativeControls
+            />
           ) : (
             <View style={styles.videoPlaceholder}>
               <Ionicons name="film-outline" size={64} color={colors.textSecondary} />
@@ -554,6 +563,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 24,
     backgroundColor: colors.background,
+  },
+  video: {
+    width: '100%',
+    height: '100%',
   },
   videoPlaceholder: {
     flex: 1,

@@ -341,7 +341,7 @@
                             <input type="file" id="episode-video" accept="video/*">
                             <span class="file-name" id="video-file-name">Aucun fichier choisi</span>
                         </div>
-                        <p style="color: #7F8C8D; font-size: 12px; margin-top: 8px;">Format: MP4, max 200MB</p>
+                        <p style="color: #7F8C8D; font-size: 12px; margin-top: 8px;">Format: MP4, MOV, AVI, WebM - max 500MB</p>
                     </div>
                     <div class="form-group">
                         <label>Cartes d'échange (une par ligne)</label>
@@ -510,19 +510,40 @@ Qu'as-tu aimé dans ce moment ?"></textarea>
             e.preventDefault();
             
             const videoFile = document.getElementById('episode-video').files[0];
-            let videoBase64 = null;
+            let videoFilename = null;
             
+            // Upload video first if provided
             if (videoFile) {
-                if (videoFile.size > 200 * 1024 * 1024) {
-                    showAlert('episode-alert', 'La vidéo est trop grande (max 200MB)', 'error');
+                if (videoFile.size > 500 * 1024 * 1024) {
+                    showAlert('episode-alert', 'La vidéo est trop grande (max 500MB)', 'error');
                     return;
                 }
                 
-                // Show loading message for large files
                 const sizeInMB = (videoFile.size / (1024 * 1024)).toFixed(2);
                 showAlert('episode-alert', `Upload de la vidéo en cours (${sizeInMB} MB)... Cela peut prendre quelques minutes.`, 'success');
                 
-                videoBase64 = await fileToBase64(videoFile);
+                try {
+                    const formData = new FormData();
+                    formData.append('file', videoFile);
+                    
+                    const uploadResponse = await fetch(`${API_URL}/upload/video`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (!uploadResponse.ok) {
+                        const errorData = await uploadResponse.json();
+                        showAlert('episode-alert', 'Erreur upload vidéo: ' + (errorData.detail || 'Erreur inconnue'), 'error');
+                        return;
+                    }
+                    
+                    const uploadData = await uploadResponse.json();
+                    videoFilename = uploadData.filename;
+                    showAlert('episode-alert', `Vidéo uploadée (${uploadData.size_mb} MB). Création de l'épisode...`, 'success');
+                } catch (error) {
+                    showAlert('episode-alert', 'Erreur upload vidéo: ' + error.message, 'error');
+                    return;
+                }
             }
             
             const cardsText = document.getElementById('episode-cards').value;
@@ -544,15 +565,13 @@ Qu'as-tu aimé dans ce moment ?"></textarea>
                 title: document.getElementById('episode-title').value,
                 description: document.getElementById('episode-description').value,
                 order: parseInt(document.getElementById('episode-order').value),
-                video_base64: videoBase64,
+                video_filename: videoFilename,
                 cards: cards,
                 mini_game: miniGame,
                 mopado_reward: parseInt(document.getElementById('episode-reward').value)
             };
             
             try {
-                showAlert('episode-alert', 'Création de l\'épisode en cours...', 'success');
-                
                 const response = await fetch(`${API_URL}/episodes`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
