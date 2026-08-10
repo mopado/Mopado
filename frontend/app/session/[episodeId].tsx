@@ -797,17 +797,6 @@ function CategorizeGame({
         <View style={styles.gameInstructions}>
           <Text style={styles.gameInstructionsText}>{instructions}</Text>
         </View>
-        <View style={styles.categorizeLabelsRow}>
-          <View style={[styles.categorizeLabelPill, { backgroundColor: colors.primary }]}>
-            <Text style={styles.categorizeLabelText}>{labelA}</Text>
-          </View>
-          <View style={[styles.categorizeLabelPill, { backgroundColor: colors.accent }]}>
-            <Text style={styles.categorizeLabelText}>{labelB}</Text>
-          </View>
-          <View style={[styles.categorizeLabelPill, { backgroundColor: colors.secondary }]}>
-            <Text style={styles.categorizeLabelText}>{labelBoth}</Text>
-          </View>
-        </View>
         <Ionicons name="chatbubbles" size={72} color={colors.primary} />
         <TouchableOpacity
           style={styles.gameStartButton}
@@ -834,13 +823,6 @@ function CategorizeGame({
 
       <View style={styles.categorizeSituationCard}>
         <Text style={styles.categorizeSituationText}>{currentSituation}</Text>
-      </View>
-
-      <View style={styles.categorizeHintRow}>
-        <Ionicons name="chatbubble-ellipses" size={16} color={colors.textSecondary} />
-        <Text style={styles.categorizeHintText}>
-          Chacun donne son avis et explique pourquoi
-        </Text>
       </View>
 
       {!isLast && (
