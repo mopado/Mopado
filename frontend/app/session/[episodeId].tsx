@@ -199,6 +199,59 @@ export default function SessionScreen() {
     }
   };
 
+  /**
+   * Step back to the previous logical step of the session. Only enabled up to
+   * the "closing" step (before rewards are awarded). After completion (from
+   * celebration_mopado onwards), the arrow is hidden.
+   */
+  const handleBack = () => {
+    if (currentStep === 'cards') {
+      if (currentCardIndex > 0) {
+        setCurrentCardIndex(currentCardIndex - 1);
+      } else {
+        setCurrentStep('video');
+      }
+    } else if (currentStep === 'game') {
+      // Back to the last discussion card if any, else to video
+      if (episode?.cards && episode.cards.length > 0) {
+        setCurrentCardIndex(episode.cards.length - 1);
+        setCurrentStep('cards');
+      } else {
+        setCurrentStep('video');
+      }
+    } else if (currentStep === 'cards_after') {
+      if (currentCardAfterIndex > 0) {
+        setCurrentCardAfterIndex(currentCardAfterIndex - 1);
+      } else if (episode?.mini_game) {
+        setCurrentStep('game');
+      } else if (episode?.cards && episode.cards.length > 0) {
+        setCurrentCardIndex(episode.cards.length - 1);
+        setCurrentStep('cards');
+      } else {
+        setCurrentStep('video');
+      }
+    } else if (currentStep === 'closing') {
+      if (episode?.cards_after_game && episode.cards_after_game.length > 0) {
+        setCurrentCardAfterIndex(episode.cards_after_game.length - 1);
+        setCurrentStep('cards_after');
+      } else if (episode?.mini_game) {
+        setCurrentStep('game');
+      } else if (episode?.cards && episode.cards.length > 0) {
+        setCurrentCardIndex(episode.cards.length - 1);
+        setCurrentStep('cards');
+      } else {
+        setCurrentStep('video');
+      }
+    }
+  };
+
+  // Whether the "back" arrow is available for the current step
+  const canGoBack =
+    currentStep === 'cards' ||
+    currentStep === 'game' ||
+    currentStep === 'cards_after' ||
+    currentStep === 'closing';
+
   const handleCompleteSession = async () => {
     // Guard against rapid double-tap: React's `isCompleting` state only
     // updates on next render, so we use a ref to block re-entry immediately.
@@ -304,14 +357,24 @@ export default function SessionScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleExit} style={styles.closeButton}>
+        <TouchableOpacity onPress={handleExit} style={styles.closeButton} testID="exit-session-button">
           <Ionicons name="close" size={24} color={colors.textWhite} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <Ionicons name="heart-circle" size={20} color={colors.textWhite} style={{ marginRight: 8 }} />
           <Text style={styles.headerTitle} numberOfLines={1}>{episode.title}</Text>
         </View>
-        <View style={styles.placeholder} />
+        {canGoBack ? (
+          <TouchableOpacity
+            onPress={handleBack}
+            style={styles.backHeaderButton}
+            testID="session-back-button"
+          >
+            <Ionicons name="arrow-back" size={22} color={colors.textWhite} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.placeholder} />
+        )}
       </View>
       
       {/* Already completed banner */}
@@ -1300,6 +1363,14 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   closeButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  backHeaderButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',

@@ -971,12 +971,31 @@ async def get_family_progress(family_id: str):
                     "closing_word": session["closing_word"]
                 })
         
+        # Count "completed" seasons: a season is completed when all of its
+        # episodes (or at least `expected_episodes`) are in the family's
+        # completed_episodes list.
+        completed_episodes_set = set(user.get("completed_episodes", []))
+        seasons = await db.seasons.find({}).to_list(100)
+        completed_seasons_count = 0
+        for s in seasons:
+            season_id_str = str(s["_id"])
+            season_episodes = await db.episodes.find({"season_id": season_id_str}).to_list(500)
+            if not season_episodes:
+                continue
+            season_ep_ids = {str(e["_id"]) for e in season_episodes}
+            completed_in_season = len(season_ep_ids & completed_episodes_set)
+            expected = int(s.get("expected_episodes") or len(season_episodes))
+            needed = min(expected, len(season_episodes))
+            if needed > 0 and completed_in_season >= needed:
+                completed_seasons_count += 1
+
         return {
             "mopado_dollars": user.get("mopado_dollars", 0),
             "badges": user.get("badges", []),
             "completed_episodes": user.get("completed_episodes", []),
             "closing_words_history": closing_words_history,
-            "total_sessions": len(sessions)
+            "total_sessions": len(sessions),
+            "completed_seasons": completed_seasons_count,
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

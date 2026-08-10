@@ -29,6 +29,7 @@ interface ProgressData {
   completed_episodes: string[];
   closing_words_history: ClosingWord[];
   total_sessions: number;
+  completed_seasons: number;
 }
 
 export default function FamilyWallScreen() {
@@ -103,6 +104,9 @@ export default function FamilyWallScreen() {
               {progressData?.mopado_dollars || 0}
             </Text>
             <Text style={styles.statLabel}>Mopado$ cumulés</Text>
+            <Text style={styles.statHint}>
+              À venir : échangez-les contre des récompenses
+            </Text>
           </View>
 
           <View style={styles.statCard}>
@@ -129,12 +133,12 @@ export default function FamilyWallScreen() {
 
           <View style={styles.statCard}>
             <View style={styles.statIconContainer}>
-              <Ionicons name="calendar" size={32} color={colors.secondary} />
+              <Ionicons name="library" size={32} color={colors.secondary} />
             </View>
             <Text style={styles.statValue}>
-              {progressData?.total_sessions || 0}
+              {progressData?.completed_seasons || 0}
             </Text>
-            <Text style={styles.statLabel}>Sessions totales</Text>
+            <Text style={styles.statLabel}>Saisons terminées</Text>
           </View>
         </View>
 
@@ -282,6 +286,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  statHint: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
+    fontStyle: 'italic',
+    opacity: 0.8,
   },
   section: {
     marginBottom: 24,

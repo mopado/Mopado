@@ -209,16 +209,14 @@ export default function SeasonQuizScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.resultContent}>
-          <Ionicons
-            name={result.passing ? 'trophy' : 'happy'}
-            size={100}
-            color={result.passing ? colors.gold : colors.primary}
-          />
-          <Text style={styles.resultTitle}>
-            {result.passing ? 'Bravo à toute la famille !' : 'Beau moment ensemble !'}
-          </Text>
-          <Text style={styles.resultScore}>
-            {totalCorrect} / {totalQ} bonnes réponses ({pct}%)
+          {result.passing ? (
+            <>
+              <Ionicons name="trophy" size={100} color={colors.gold} />
+              <Text style={styles.resultTitle}>Bravo à toute la famille !</Text>
+            </>
+          ) : null}
+          <Text style={[styles.resultScore, !result.passing && { marginTop: 20 }]}>
+            {totalCorrect} bonne(s) réponse(s) ({pct}%)
           </Text>
           <View style={styles.resultCard}>
             <View style={styles.resultRow}>
@@ -233,7 +231,7 @@ export default function SeasonQuizScreen() {
             ) : null}
             {!result.passing && quiz.quiz_badge_name ? (
               <Text style={styles.hintText}>
-                Il fallait plus de 60% pour débloquer le badge « {quiz.quiz_badge_name} ».
+                Dommage, il fallait plus de 60% de bonnes réponses pour débloquer le badge « {quiz.quiz_badge_name} ».
               </Text>
             ) : null}
           </View>
@@ -250,7 +248,13 @@ export default function SeasonQuizScreen() {
   const q = questions[index];
   const isLast = index >= questions.length - 1;
   const currentAnswer = answers[index];
-  const hasAnswered = currentAnswer !== null && currentAnswer !== undefined;
+  const hasAnswered = (() => {
+    if (currentAnswer === null || currentAnswer === undefined) return false;
+    if (q.type === 'ranking') {
+      return Array.isArray(currentAnswer) && currentAnswer.length === q.items.length;
+    }
+    return true;
+  })();
 
   const submitAnswer = async () => {
     if (submittingRef.current) return;
@@ -303,8 +307,20 @@ export default function SeasonQuizScreen() {
     if (!hasAnswered) return null;
     if (q.type === 'mcq') return currentAnswer === q.correct_index;
     if (q.type === 'true_false') return currentAnswer === q.correct;
+    if (q.type === 'ranking') {
+      if (!Array.isArray(currentAnswer) || currentAnswer.length !== q.items.length) return null;
+      // Correct if user ordered items in original array order (0,1,2,...)
+      return currentAnswer.every((v: number, i: number) => v === i);
+    }
     return null;
   })();
+
+  // For ranking: as soon as user picks all items, show feedback immediately
+  const rankingComplete =
+    q.type === 'ranking' &&
+    Array.isArray(currentAnswer) &&
+    currentAnswer.length === q.items.length;
+  const shouldShowRankingFeedback = rankingComplete && q.type === 'ranking';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -383,9 +399,11 @@ export default function SeasonQuizScreen() {
 
         {q.type === 'ranking' && (
           <RankingAnswer
+            key={`ranking-${index}`}
             items={q.items}
             initialShuffle={shuffledForRanking[index] || []}
             value={currentAnswer}
+            locked={rankingComplete}
             onChange={(order) => {
               const newAns = [...answers];
               newAns[index] = order;
@@ -394,7 +412,7 @@ export default function SeasonQuizScreen() {
           />
         )}
 
-        {showFeedback && q.type !== 'ranking' ? (
+        {(showFeedback && q.type !== 'ranking') || shouldShowRankingFeedback ? (
           <View
             style={[
               styles.feedbackCard,
@@ -409,6 +427,18 @@ export default function SeasonQuizScreen() {
             <Text style={styles.feedbackText}>
               {isCorrectPreview ? 'Bonne réponse !' : 'Ce n\'était pas la bonne réponse.'}
             </Text>
+          </View>
+        ) : null}
+
+        {shouldShowRankingFeedback && !isCorrectPreview && q.type === 'ranking' ? (
+          <View style={styles.correctOrderBox}>
+            <Text style={styles.correctOrderTitle}>Le bon ordre était :</Text>
+            {q.items.map((item, i) => (
+              <View key={i} style={styles.correctOrderRow}>
+                <Text style={styles.correctOrderPos}>{i + 1}.</Text>
+                <Text style={styles.correctOrderText}>{item}</Text>
+              </View>
+            ))}
           </View>
         ) : null}
       </ScrollView>
@@ -443,11 +473,13 @@ function RankingAnswer({
   initialShuffle,
   value,
   onChange,
+  locked = false,
 }: {
   items: string[];
   initialShuffle: number[];
   value: number[] | null;
   onChange: (v: number[]) => void;
+  locked?: boolean;
 }) {
   // The shuffled pool the user picks from
   const [remaining, setRemaining] = useState<number[]>(
@@ -456,15 +488,23 @@ function RankingAnswer({
   const [chosen, setChosen] = useState<number[]>(value || []);
 
   const pick = (originalIdx: number) => {
+    if (locked) return;
     const next = [...chosen, originalIdx];
     setChosen(next);
     setRemaining(remaining.filter((i) => i !== originalIdx));
     onChange(next);
   };
   const reset = () => {
+    if (locked) return;
     setChosen([]);
     setRemaining(initialShuffle);
     onChange([]);
+  };
+
+  // Determine per-position correctness for coloring when locked
+  const positionCorrect = (position: number, originalIdx: number) => {
+    if (!locked) return null;
+    return position === originalIdx;
   };
 
   return (
@@ -474,26 +514,45 @@ function RankingAnswer({
       </Text>
       {chosen.length > 0 ? (
         <View style={styles.rankingChosenList}>
-          {chosen.map((originalIdx, position) => (
-            <View key={originalIdx} style={styles.rankingChosenItem}>
-              <Text style={styles.rankingChosenPos}>{position + 1}.</Text>
-              <Text style={styles.rankingChosenText}>{items[originalIdx]}</Text>
-            </View>
+          {chosen.map((originalIdx, position) => {
+            const correct = positionCorrect(position, originalIdx);
+            return (
+              <View
+                key={originalIdx}
+                style={[
+                  styles.rankingChosenItem,
+                  locked && correct === true && { backgroundColor: colors.success },
+                  locked && correct === false && { backgroundColor: colors.error },
+                ]}
+              >
+                <Text style={styles.rankingChosenPos}>{position + 1}.</Text>
+                <Text style={styles.rankingChosenText}>{items[originalIdx]}</Text>
+                {locked ? (
+                  <Ionicons
+                    name={correct ? 'checkmark-circle' : 'close-circle'}
+                    size={18}
+                    color={colors.textWhite}
+                  />
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+      {!locked ? (
+        <View style={styles.rankingPool}>
+          {remaining.map((originalIdx) => (
+            <TouchableOpacity
+              key={originalIdx}
+              style={styles.rankingPoolItem}
+              onPress={() => pick(originalIdx)}
+            >
+              <Text style={styles.rankingPoolItemText}>{items[originalIdx]}</Text>
+            </TouchableOpacity>
           ))}
         </View>
       ) : null}
-      <View style={styles.rankingPool}>
-        {remaining.map((originalIdx) => (
-          <TouchableOpacity
-            key={originalIdx}
-            style={styles.rankingPoolItem}
-            onPress={() => pick(originalIdx)}
-          >
-            <Text style={styles.rankingPoolItemText}>{items[originalIdx]}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      {chosen.length > 0 ? (
+      {chosen.length > 0 && !locked ? (
         <TouchableOpacity style={styles.resetBtn} onPress={reset}>
           <Ionicons name="refresh" size={14} color={colors.textSecondary} />
           <Text style={styles.resetBtnText}>Recommencer</Text>
@@ -624,6 +683,13 @@ const styles = StyleSheet.create({
 
   resultContent: { padding: 24, alignItems: 'center' },
   resultTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text, marginTop: 12, textAlign: 'center' },
+  resultEncouragement: {
+    fontSize: 16,
+    color: colors.warning,
+    fontWeight: '600',
+    marginTop: 6,
+    textAlign: 'center',
+  },
   resultScore: { fontSize: 18, color: colors.textSecondary, marginTop: 8 },
   resultCard: {
     marginTop: 20,
@@ -637,4 +703,20 @@ const styles = StyleSheet.create({
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   resultRowText: { fontSize: 16, color: colors.text, fontWeight: '600' },
   hintText: { fontSize: 12, color: colors.textSecondary, fontStyle: 'italic' },
+  correctOrderBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: colors.backgroundTertiary,
+    gap: 4,
+  },
+  correctOrderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  correctOrderRow: { flexDirection: 'row', gap: 8, paddingVertical: 2 },
+  correctOrderPos: { fontWeight: 'bold', color: colors.primary, minWidth: 24 },
+  correctOrderText: { color: colors.text, flex: 1, fontSize: 13 },
 });

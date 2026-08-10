@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 19 — all 5 requested changes verified. Backend: 5/5 pytest cases in test_iteration_19.py PASS: (1) /api/progress/{fid} returns `completed_seasons:int` for a brand-new family (=0); (2) same field is present and int for the seeded famille.test@mopado.fr; (3) after registering a fresh family and completing all expected_episodes of Saison test 1 via /sessions/start + /sessions/{id}/complete, completed_seasons transitions to >=1; (4) PUT /api/seasons/{id}/quiz round-trips a ranking question with 5 items; (5) same with 2 items (boundary). Frontend: (a) Family Wall for qzu-e17099@t.fr shows exactly the 4 expected stat cards — Mopado$ cumulés (4) with italic hint 'À venir : échangez-les contre des récompenses', Badges obtenus (1), Épisodes terminés (0), Saisons terminées (0). 'Sessions totales' string no longer present in the page. (b) In-session back button: full walkthrough on famille.test's 'Mes qualités' episode — VIDEO step: back button NOT present (count=0); CARDS[0]: back present (count=1) and tapping it returns to the video step; GAME (both before and after Démarrer): back present; after the game and closing steps: back still present; after tapping 'Terminer' on closing (celebration_mopado screen with '+5 Mopado$ / Bravo !'): back button is HIDDEN (count=0). Every canGoBack transition works as coded. (c) Admin panel: Saisons tab → quiz editor for 'Saison test 1' → added a new '+ Classement' question → 4 items → clicked '+ Ajouter un item' → 5 items → clicked '×' on item 3 → 4 items → removed down to 2 items and verified the last-2 '×' buttons are BOTH disabled (evaluation returned [True, True]). (d) Quiz failure text: source verified at quiz/[seasonId].tsx:220-224 (`!result.passing → 'Dommage, vous réussirez la prochaine fois !'` with resultEncouragement style = colors.warning #F39C12 orange). Backend confirmed via a fresh family + all-wrong answers: /quiz/complete returns passing:false, mopado_earned:0, badge_earned:null — this is exactly the input the frontend uses to render the orange encouragement text.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration_19.py",
+    "/app/test_reports/pytest/pytest_iteration_19.xml"
+  ],
+  "action_items": [
+    "(Non-blocking / nice-to-have) The '+ Ajouter un item' button in admin.html uses the .btn-secondary styling which renders in a light grey. Visually it can look like it might be disabled; consider a distinct primary-outline style to make it more obviously actionable. It IS fully clickable.",
+    "(Non-blocking) The failing-quiz path was validated by (i) reading the JSX, (ii) confirming resultEncouragement uses colors.warning (#F39C12 orange), and (iii) POSTing a wrong-answer completion which returned {passing:false}. A full UI screen-capture of the orange 'Dommage…' text was not obtained because the 3-question quiz for Saison test 1 is already locked (all seed families that have episodes done have already taken it). If the main agent wants a visual regression on this text, temporarily reset a family with `db.users.update_one({email:'...'},{'$set':{completed_quizzes:[]}})` or add a wipe endpoint."
+  ],
+  "critical_code_review_comments": [
+    "server.py:974-990 — completed_seasons logic correctly uses `needed = min(expected, len(season_episodes))`, which handles the case where a season is under-populated relative to its expected_episodes count. Boundary check `needed > 0` prevents empty-season false positives. Good.",
+    "session/[episodeId].tsx:207-246 (handleBack) — the branch for `cards_after` correctly falls back to game → last card → video in that order, matching the forward-navigation order. `canGoBack` is `false` on 'video' (correct — first step, no earlier state) and on all celebration/reward/planning/closing_message steps (correct — rewards already granted, can't be re-consumed).",
+    "quiz/[seasonId].tsx:220-224 — using `!result.passing` (not `result.passing === false`) is safe here because `passing` is guaranteed to be a boolean from the backend (server.py:608 `passing = ratio > QUIZ_PASSING_RATIO`).",
+    "family-wall.tsx:32 — `completed_seasons: number` correctly added to the ProgressData type. The stat card defaults to `progressData?.completed_seasons || 0`, so pre-migration users without the field are handled gracefully.",
+    "admin.html:1330-1334 (removeRankingItem) — early return when `items.length <= 2` is the ONLY safeguard; the button itself is also disabled in that state (line 1367). Both defensive checks are present. Good.",
+    "admin.html:1325-1328 (addRankingItem) — no upper limit on ranking items. This matches the spec (\"admin can pick the number of items, not fixed at 4\") but may want a soft cap (e.g. 10) later purely for UX."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration_19.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 pytest cases pass)",
+    "frontend": "100% for all 4 UI-verifiable changes. Change #3 (Dommage failure text) validated via source review + backend passing:false response, per the review-request option (b)."
+  },
+  "seed_data_creation": "Created 3 fresh TEST_ families during backend testing: TEST_it19_prog0_*, TEST_it19_sfull_* (completed all Saison test 1 episodes — now has completed_seasons>=1), TEST_it19_rank5_* and TEST_it19_rank2_* (used only to fetch the quiz endpoint, no state change). Also created one throwaway TEST_fail_* family via inline python for the failing-quiz backend probe. The Saison test 1 quiz was mutated during pytest (5-item then 2-item ranking) but restored in test-teardown via the _restore_quiz helper. NOTE: I did NOT reset the qzu-e17099@t.fr account — it retains its state from iteration_18 (mopado=4, badge Champion saison test, completed_quizzes contains a season id). famille.test@mopado.fr had one NEW session created on 'Mes qualités' as part of the back-button walkthrough (session was completed to end the flow); rewards were 0 since the family already had that episode completed (verified — 'Épisode déjà effectué' banner shown, and closing_word was force-null by server.py:820). No changes to the season/episode catalogue.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 19 (5 changes) is fully working end-to-end. Notes: (1) The current live seed of Saison test 1 quiz was RESTORED after the ranking round-trip pytest cases via the _restore_quiz helper in test_iteration_19.py — its quiz_published_at from iteration_18 (2026-08-10) is preserved but the PUT-without-publish path did NOT bump it. Verify via GET /api/seasons before running new tests. (2) 'Sessions totales' string is no longer present anywhere on the Family Wall — it was fully replaced by 'Saisons terminées' with a library icon. (3) The back-button testID is 'session-back-button' and it's placed in the top-right of the session header View (SafeAreaView edges=['top']). The exit-close 'X' testID is 'exit-session-button' on the top-left. (4) Reproduction recipe for the failing-quiz screen (if a future run needs the UI shot): register fresh family → complete both Saison test 1 episodes via /sessions/start + PUT /sessions/{id}/complete → open /quiz/{season_id} → answer everything wrong (T/F: invert; ranking: reversed order) → Valider → orange 'Dommage, vous réussirez la prochaine fois !' should show below 'Beau moment ensemble !'.",
+  "rca_of_issue": "N/A — new feature validation; no bugs found."
+}

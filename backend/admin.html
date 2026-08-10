@@ -323,7 +323,7 @@
                 <h2>Quiz de fin de saison</h2>
                 <div id="quiz-alert"></div>
                 <p style="color: #7F8C8D; font-size: 13px; margin-bottom: 12px;">
-                    Sélectionnez une saison, remplissez les questions (MCQ, Vrai/Faux, Classement) puis publiez.
+                    Sélectionnez une saison, remplissez les questions (Vrai/Faux, Classement) puis publiez.
                     Le quiz reste disponible <strong>7 jours</strong> à partir de sa publication.
                     Bonus : <strong>2 Mopado$ / bonne réponse</strong> + badge à ≥60% de bonnes réponses.
                 </p>
@@ -346,7 +346,6 @@
                         <label>Questions</label>
                         <div id="quiz-questions-list"></div>
                         <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
-                            <button type="button" class="btn btn-secondary" onclick="addQuizQuestion('mcq')">+ MCQ</button>
                             <button type="button" class="btn btn-secondary" onclick="addQuizQuestion('true_false')">+ Vrai/Faux</button>
                             <button type="button" class="btn btn-secondary" onclick="addQuizQuestion('ranking')">+ Classement</button>
                         </div>
@@ -1322,6 +1321,17 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             quizDraft.questions[idx].items[itemIdx] = value;
         }
 
+        function addRankingItem(qIdx) {
+            quizDraft.questions[qIdx].items.push('');
+            renderQuizQuestions();
+        }
+
+        function removeRankingItem(qIdx, itemIdx) {
+            if (quizDraft.questions[qIdx].items.length <= 2) return;
+            quizDraft.questions[qIdx].items.splice(itemIdx, 1);
+            renderQuizQuestions();
+        }
+
         function renderQuizQuestions() {
             const list = document.getElementById('quiz-questions-list');
             if (!quizDraft.questions.length) {
@@ -1353,9 +1363,11 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
                             <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
                                 <span style="font-weight:700; min-width:24px;">${ii+1}.</span>
                                 <input type="text" value="${escapeAttrVal(it)}" placeholder="Item ${ii+1}" oninput="updateRankingItem(${i}, ${ii}, this.value)" style="flex:1">
+                                <button type="button" class="btn btn-danger" style="padding:4px 8px; font-size:12px" onclick="removeRankingItem(${i}, ${ii})" ${q.items.length <= 2 ? 'disabled title="Minimum 2 items"' : ''}>×</button>
                             </div>
                         `).join('')}
-                        <p style="font-size:11px; color:#7F8C8D; margin-top:4px;">L'ordre saisi est le classement correct. Les familles verront les items dans un ordre aléatoire.</p>
+                        <button type="button" class="btn btn-secondary" style="margin-top:8px; font-size:12px; padding:6px 12px" onclick="addRankingItem(${i})">+ Ajouter un item</button>
+                        <p style="font-size:11px; color:#7F8C8D; margin-top:6px;">L'ordre saisi est le classement correct. Les familles verront les items dans un ordre aléatoire.</p>
                     `;
                 }
                 const typeLabel = { mcq: 'MCQ', true_false: 'Vrai/Faux', ranking: 'Classement' }[q.type] || q.type;
