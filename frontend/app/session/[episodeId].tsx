@@ -232,9 +232,12 @@ export default function SessionScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleExit} style={styles.closeButton}>
-          <Ionicons name="close" size={28} color={colors.text} />
+          <Ionicons name="close" size={24} color={colors.textWhite} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{episode.title}</Text>
+        <View style={styles.headerTitleContainer}>
+          <Ionicons name="heart-circle" size={20} color={colors.textWhite} style={{ marginRight: 8 }} />
+          <Text style={styles.headerTitle} numberOfLines={1}>{episode.title}</Text>
+        </View>
         <View style={styles.placeholder} />
       </View>
 
@@ -354,13 +357,6 @@ function VideoStepContent({
             </View>
           )}
         </View>
-
-        <View style={styles.instructionCard}>
-          <Ionicons name="information-circle" size={24} color={colors.primary} />
-          <Text style={styles.instructionText}>
-            Regardez cette courte vidéo ensemble en famille
-          </Text>
-        </View>
       </ScrollView>
 
       <TouchableOpacity style={styles.continueButton} onPress={onNext}>
@@ -479,8 +475,9 @@ function LettersGame({
 }) {
   const [revealed, setRevealed] = useState(false);
   const [letters] = useState(() => {
-    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const availableLetters = alphabet.split('');
+    // Restricted alphabet as requested
+    const alphabet = ['B', 'T', 'R', 'E', 'A', 'M', 'J', 'O', 'C', 'N'];
+    const availableLetters = [...alphabet];
     const randomLetters: string[] = [];
     // Ensure unique letters
     for (let i = 0; i < 4; i++) {
@@ -516,21 +513,13 @@ function LettersGame({
   }
 
   return (
-    <>
-      <View style={styles.lettersContainer}>
-        {letters.map((letter, index) => (
-          <View key={index} style={styles.letterCard}>
-            <Text style={styles.letterText}>{letter}</Text>
-          </View>
-        ))}
-      </View>
-      <View style={styles.instructionCard}>
-        <Ionicons name="happy" size={24} color={colors.accent} />
-        <Text style={styles.instructionText}>
-          Chacun trouve une qualité pour un autre membre de la famille commençant par l'une des lettres
-        </Text>
-      </View>
-    </>
+    <View style={styles.lettersContainer}>
+      {letters.map((letter, index) => (
+        <View key={index} style={styles.letterCard}>
+          <Text style={styles.letterText}>{letter}</Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -904,16 +893,10 @@ function BonusMissionStepContent({
     <View style={styles.stepContainer}>
       <ScrollView contentContainerStyle={[styles.scrollContent, styles.celebrationContent]}>
         <Ionicons name="gift" size={80} color={colors.primary} />
-        <Text style={styles.bonusMissionTitle}>Mission bonus de la semaine</Text>
+        <Text style={styles.bonusMissionTitle}>Mission bonus... si tu l'acceptes</Text>
         <View style={styles.bonusMissionCard}>
           <Ionicons name="sparkles" size={32} color={colors.gold} style={{ marginBottom: 12 }} />
           <Text style={styles.bonusMissionText}>{mission}</Text>
-        </View>
-        <View style={styles.celebrationMessage}>
-          <Ionicons name="star" size={24} color={colors.accent} />
-          <Text style={styles.celebrationText}>
-            À bientôt pour partager cette mission ensemble !
-          </Text>
         </View>
       </ScrollView>
       <TouchableOpacity style={styles.continueButton} onPress={onFinish}>
@@ -940,23 +923,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.background,
+    paddingVertical: 14,
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   closeButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  headerTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    flex: 1,
-    textAlign: 'center',
+    fontWeight: '700',
+    color: colors.textWhite,
+    letterSpacing: 0.3,
   },
   placeholder: {
     width: 40,
