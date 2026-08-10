@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { colors } from '@/src/theme/colors';
@@ -31,19 +32,28 @@ interface ProgressData {
 }
 
 export default function FamilyWallScreen() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadProgressData();
-  }, []);
+  // Reload every time the tab gains focus AND when user is available.
+  useFocusEffect(
+    useCallback(() => {
+      loadProgressData();
+    }, [user?.id])
+  );
 
   const loadProgressData = async () => {
-    if (!user) return;
+    if (!user?.id) {
+      // Still no user hydrated — stop the spinner so we don't hang forever.
+      setIsLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
     try {
+      await refreshUser();
       const response = await fetch(`${BACKEND_URL}/api/progress/${user.id}`);
       if (response.ok) {
         const data = await response.json();

@@ -287,6 +287,7 @@
         <div class="tabs">
             <button class="tab active" onclick="switchTab('seasons')">Saisons</button>
             <button class="tab" onclick="switchTab('episodes')">Épisodes</button>
+            <button class="tab" onclick="switchTab('families')">Familles</button>
         </div>
 
         <!-- Seasons Tab -->
@@ -466,6 +467,19 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
                 <div id="episodes-list"></div>
             </div>
         </div>
+
+        <!-- Families Tab -->
+        <div id="families-tab" class="tab-content">
+            <div class="card">
+                <h2>Familles inscrites</h2>
+                <div id="families-alert"></div>
+                <p style="color: #7F8C8D; font-size: 13px; margin-bottom: 12px;">
+                    Liste de tous les comptes créés dans l'application.
+                    ⚠️ La suppression efface définitivement le compte et son historique.
+                </p>
+                <div id="families-list">Chargement...</div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -487,6 +501,9 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             if (tabName === 'episodes') {
                 loadSeasonsForSelect();
                 loadEpisodes();
+            }
+            if (tabName === 'families') {
+                loadFamilies();
             }
         }
         
@@ -1015,6 +1032,76 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             setTimeout(() => {
                 alertDiv.innerHTML = '';
             }, 5000);
+        }
+
+        // Families
+        async function loadFamilies() {
+            const list = document.getElementById('families-list');
+            list.innerHTML = 'Chargement...';
+            try {
+                const response = await fetch(`${API_URL}/admin/families`);
+                if (!response.ok) {
+                    list.innerHTML = '<p style="color: red;">Erreur de chargement</p>';
+                    return;
+                }
+                const families = await response.json();
+                if (families.length === 0) {
+                    list.innerHTML = '<p style="color: #7F8C8D;">Aucune famille inscrite</p>';
+                    return;
+                }
+                list.innerHTML = families.map(f => {
+                    const created = f.created_at
+                        ? new Date(f.created_at).toLocaleDateString('fr-FR', {day:'2-digit', month:'short', year:'numeric'})
+                        : '—';
+                    const ages = (f.children_ages || []).join(', ') || '—';
+                    return `
+                    <div class="list-item">
+                        <div class="list-item-info">
+                            <h3>${escapeHtml(f.family_name || '(sans nom)')}</h3>
+                            <p><strong>${escapeHtml(f.email)}</strong></p>
+                            <p style="font-size: 12px; margin-top: 4px;">
+                                👶 ${f.nb_children} enfant(s) [${ages}] •
+                                💰 ${f.mopado_dollars} Mopado$ •
+                                🎖️ ${f.badges_count} badge(s) •
+                                ✅ ${f.completed_count} épisode(s) •
+                                📅 Créé ${created}
+                            </p>
+                        </div>
+                        <div class="list-item-actions">
+                            <button class="btn btn-danger" onclick="deleteFamily('${f.id}', '${escapeAttr(f.email)}')">Supprimer</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            } catch (error) {
+                list.innerHTML = '<p style="color: red;">Erreur: ' + error.message + '</p>';
+            }
+        }
+
+        async function deleteFamily(id, email) {
+            if (!confirm(`Supprimer définitivement le compte "${email}" ?\n\nCela efface aussi toutes ses sessions.`)) return;
+            try {
+                const r = await fetch(`${API_URL}/family/${id}`, { method: 'DELETE' });
+                if (r.ok) {
+                    showAlert('families-alert', 'Compte supprimé.', 'success');
+                    loadFamilies();
+                    loadStats();
+                } else {
+                    const err = await r.json();
+                    showAlert('families-alert', 'Erreur: ' + (err.detail || 'Suppression impossible'), 'error');
+                }
+            } catch (e) {
+                showAlert('families-alert', 'Erreur: ' + e.message, 'error');
+            }
+        }
+
+        function escapeHtml(str) {
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function escapeAttr(str) {
+            return String(str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         }
 
         // Initial load

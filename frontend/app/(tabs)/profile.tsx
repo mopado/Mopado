@@ -13,10 +13,15 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { colors } from '@/src/theme/colors';
 import ConfirmModal from '@/src/components/ConfirmModal';
 
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   const handleLogoutPress = () => {
     setShowLogoutModal(true);
@@ -34,6 +39,38 @@ export default function ProfileScreen() {
 
   const handleLogoutCancel = () => {
     setShowLogoutModal(false);
+  };
+
+  const handleDeletePress = () => {
+    setDeleteError('');
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!user?.id) return;
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/family/${user.id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Suppression impossible');
+      }
+      setShowDeleteModal(false);
+      await logout();
+      router.replace('/');
+    } catch (e: any) {
+      setDeleteError(e?.message || 'Erreur inconnue');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+    setDeleteError('');
   };
 
   return (
@@ -124,6 +161,16 @@ export default function ProfileScreen() {
           <Text style={styles.logoutButtonText}>Déconnexion</Text>
         </TouchableOpacity>
 
+        {/* Delete Account Button */}
+        <TouchableOpacity
+          style={styles.deleteAccountButton}
+          onPress={handleDeletePress}
+          testID="delete-account-button"
+        >
+          <Ionicons name="trash-outline" size={20} color={colors.textWhite} />
+          <Text style={styles.deleteAccountText}>Supprimer mon compte</Text>
+        </TouchableOpacity>
+
         {/* App Version */}
         <Text style={styles.version}>Mopado v1.0.0</Text>
       </ScrollView>
@@ -136,6 +183,21 @@ export default function ProfileScreen() {
         cancelText="Annuler"
         onConfirm={handleLogoutConfirm}
         onCancel={handleLogoutCancel}
+        isDestructive={true}
+      />
+
+      <ConfirmModal
+        visible={showDeleteModal}
+        title="Supprimer mon compte"
+        message={
+          deleteError
+            ? `Erreur : ${deleteError}\n\nRéessayez ?`
+            : "Cette action est irréversible. Vous perdrez définitivement votre compte, vos Mopado$, badges et l'historique de vos mots de fin. Confirmer ?"
+        }
+        confirmText={isDeleting ? 'Suppression...' : 'Supprimer'}
+        cancelText="Annuler"
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
         isDestructive={true}
       />
     </SafeAreaView>
@@ -262,6 +324,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.error,
+    marginLeft: 8,
+  },
+  deleteAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.error,
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+  },
+  deleteAccountText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textWhite,
     marginLeft: 8,
   },
   version: {

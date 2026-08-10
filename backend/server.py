@@ -305,6 +305,43 @@ async def update_family_profile(user_id: str, profile: dict):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
+@api_router.delete("/family/{user_id}")
+async def delete_family_account(user_id: str):
+    """Delete a user account and all of its sessions.
+    Called from the mobile Profile screen and from the Admin panel.
+    """
+    try:
+        result = await db.users.delete_one({"_id": ObjectId(user_id)})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        await db.sessions.delete_many({"family_id": user_id})
+        return {"message": "Account deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api_router.get("/admin/families")
+async def list_families():
+    """List all registered families for the admin panel."""
+    users = await db.users.find().sort("created_at", -1).to_list(500)
+    result = []
+    for u in users:
+        result.append({
+            "id": str(u["_id"]),
+            "email": u.get("email"),
+            "family_name": u.get("family_name"),
+            "nb_children": u.get("nb_children", 0),
+            "children_ages": u.get("children_ages", []),
+            "mopado_dollars": u.get("mopado_dollars", 0),
+            "badges_count": len(u.get("badges", [])),
+            "completed_count": len(u.get("completed_episodes", [])),
+            "created_at": u.get("created_at").isoformat() if u.get("created_at") else None,
+        })
+    return result
+
 # ==================== SEASON ROUTES ====================
 
 @api_router.get("/seasons")

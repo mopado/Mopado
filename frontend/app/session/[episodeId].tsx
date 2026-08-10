@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -84,6 +84,9 @@ export default function SessionScreen() {
   const [badgesEarned, setBadgesEarned] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCompleting, setIsCompleting] = useState(false);
+  // useRef guard so a double-tap on "Terminer" cannot fire two concurrent
+  // completion requests before React re-renders the disabled state.
+  const isCompletingRef = useRef(false);
   
   // Detect if episode is already completed BEFORE starting the session
   const isAlreadyCompleted = user?.completed_episodes?.includes(episodeId as string) || false;
@@ -172,6 +175,10 @@ export default function SessionScreen() {
   };
 
   const handleCompleteSession = async () => {
+    // Guard against rapid double-tap: React's `isCompleting` state only
+    // updates on next render, so we use a ref to block re-entry immediately.
+    if (isCompletingRef.current) return;
+
     if (!closingWord.trim()) {
       setClosingError("Choisissez d'abord un mot");
       return;
@@ -183,6 +190,7 @@ export default function SessionScreen() {
       return;
     }
 
+    isCompletingRef.current = true;
     setIsCompleting(true);
     try {
       const response = await fetch(
@@ -206,10 +214,12 @@ export default function SessionScreen() {
         setCurrentStep('celebration_mopado');
       } else {
         setClosingError('Impossible de terminer la session');
+        isCompletingRef.current = false;
       }
     } catch (error) {
       console.error('Error completing session:', error);
       setClosingError('Une erreur est survenue');
+      isCompletingRef.current = false;
     } finally {
       setIsCompleting(false);
     }
@@ -273,7 +283,7 @@ export default function SessionScreen() {
         <View style={styles.alreadyCompletedBanner}>
           <Ionicons name="checkmark-circle" size={18} color={colors.textWhite} />
           <Text style={styles.alreadyCompletedBannerText}>
-            Épisode déjà effectué • Aucun Mopado$ à gagner
+            Épisode déjà effectué • Aucun Mopado$ ni badge à gagner
           </Text>
         </View>
       )}
@@ -889,7 +899,7 @@ function MopadoCelebrationStep({
               Épisode déjà complété
             </Text>
             <Text style={styles.alreadyCompletedSubtext}>
-              Vous avez déjà gagné les Mopado$ pour cet épisode
+              Vous avez déjà gagné les Mopado$ et badges pour cet épisode. Aucun Mopado$ ni badge à gagner cette fois-ci.
             </Text>
           </View>
         ) : (
