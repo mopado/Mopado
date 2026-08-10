@@ -368,6 +368,7 @@ Ressenti | Qu'as-tu aimé dans ce moment ?"></textarea>
                             <option value="true_false">Vrai / Faux</option>
                             <option value="ranking">Classement</option>
                             <option value="categorize">Catégorisation en 3 (Ami / Pote / Les 2, ...)</option>
+                            <option value="agree_or_not">D'accord... ou pas</option>
                             <option value="quiz">Quiz (choix multiples)</option>
                             <option value="custom">Personnalisé</option>
                         </select>
@@ -432,7 +433,23 @@ On fait juste du sport ensemble"></textarea>
                             </p>
                         </div>
                     </div>
-                    
+
+                    <!-- Agree or Not specific fields -->
+                    <div id="agree-or-not-fields" class="game-type-fields" style="display: none;">
+                        <div class="form-group">
+                            <label>Affirmations (une par ligne, idéalement 6)</label>
+                            <textarea id="episode-aon-affirmations" placeholder="Il faut toujours dire la vérité même si ça peut blesser
+On peut être amoureux de plusieurs personnes en même temps
+Les parents ont toujours raison
+L'argent ne fait pas le bonheur
+On peut réussir sans travailler dur
+Les jeux vidéo rendent violent"></textarea>
+                            <p style="color: #7F8C8D; font-size: 12px; margin-top: 4px;">
+                                💡 Les affirmations apparaîtront une par une. Chacun dit s'il est d'accord ou pas.
+                            </p>
+                        </div>
+                    </div>
+
                     <!-- Quiz specific fields -->
                     <div id="quiz-fields" class="game-type-fields" style="display: none;">
                         <div class="form-group">
@@ -542,7 +559,7 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             document.querySelectorAll('.game-type-fields').forEach(el => el.style.display = 'none');
             
             if (type) {
-                const fieldsElement = document.getElementById(`${type.replace('_', '-')}-fields`);
+                const fieldsElement = document.getElementById(`${type.replace(/_/g, '-')}-fields`);
                 if (fieldsElement) {
                     fieldsElement.style.display = 'block';
                 }
@@ -590,6 +607,12 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
                     label_both: document.getElementById('episode-cat-label-both').value.trim() || 'Les 2',
                     situations,
                 };
+            } else if (type === 'agree_or_not') {
+                const affirmations = document.getElementById('episode-aon-affirmations').value
+                    .split('\n')
+                    .filter(line => line.trim())
+                    .map(line => line.trim());
+                data = { affirmations };
             } else if (type === 'quiz') {
                 const questions = document.getElementById('episode-quiz-questions').value
                     .split('\n')
@@ -960,6 +983,9 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
                 document.getElementById('episode-cat-label-both').value = g.data?.label_both || 'Les 2';
                 document.getElementById('episode-cat-situations').value =
                     (g.data?.situations || []).join('\n');
+            } else if (g.type === 'agree_or_not') {
+                document.getElementById('episode-aon-affirmations').value =
+                    (g.data?.affirmations || []).join('\n');
             } else if (g.type === 'quiz') {
                 const lines = (g.data?.questions || [])
                     .map(q => `${q.question} | ${q.answers?.[0] || ''} | ${q.answers?.[1] || ''} | ${q.answers?.[2] || ''} | ${q.correct ?? 0}`)

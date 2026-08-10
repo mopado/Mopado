@@ -509,7 +509,7 @@ function GameStepContent({
   const gameType = game.type || 'letters';
   // For letters/ranking/categorize, hide the "Nous avons terminé" button
   // until the family has actually reached the end.
-  const hidesTerminate = gameType === 'letters' || gameType === 'ranking' || gameType === 'categorize';
+  const hidesTerminate = gameType === 'letters' || gameType === 'ranking' || gameType === 'categorize' || gameType === 'agree_or_not';
   const [showTerminateButton, setShowTerminateButton] = useState(!hidesTerminate);
 
   return (
@@ -544,6 +544,13 @@ function GameStepContent({
         )}
         {gameType === 'categorize' && (
           <CategorizeGame
+            instructions={game.instructions}
+            data={game.data}
+            onReachEnd={() => setShowTerminateButton(true)}
+          />
+        )}
+        {gameType === 'agree_or_not' && (
+          <AgreeOrNotGame
             instructions={game.instructions}
             data={game.data}
             onReachEnd={() => setShowTerminateButton(true)}
@@ -830,6 +837,84 @@ function CategorizeGame({
           style={styles.tfNextButton}
           onPress={handleNext}
           testID="categorize-next-button"
+        >
+          <Text style={styles.tfNextButtonText}>Suivant</Text>
+          <Ionicons name="arrow-forward" size={18} color={colors.textWhite} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+// Agree Or Not Game — same sequential UX as Categorize but no labels.
+// Family shows 1 affirmation at a time and each member says "d'accord" or "pas d'accord" out loud.
+function AgreeOrNotGame({
+  instructions,
+  data,
+  onReachEnd,
+}: {
+  instructions: string;
+  data?: any;
+  onReachEnd: () => void;
+}) {
+  const [started, setStarted] = useState(false);
+  const [index, setIndex] = useState(0);
+
+  const affirmations: string[] = data?.affirmations || [];
+  const total = affirmations.length;
+
+  const handleStart = () => {
+    setStarted(true);
+    if (total <= 1) onReachEnd();
+  };
+
+  const handleNext = () => {
+    const nextIdx = index + 1;
+    if (nextIdx < total) {
+      setIndex(nextIdx);
+      if (nextIdx === total - 1) onReachEnd();
+    }
+  };
+
+  if (!started) {
+    return (
+      <View style={styles.gameStartContainer}>
+        <View style={styles.gameInstructions}>
+          <Text style={styles.gameInstructionsText}>{instructions}</Text>
+        </View>
+        <Ionicons name="chatbubbles" size={72} color={colors.primary} />
+        <TouchableOpacity
+          style={styles.gameStartButton}
+          onPress={handleStart}
+          testID="start-agree-or-not-button"
+        >
+          <Text style={styles.gameStartButtonText}>Démarrer</Text>
+          <Ionicons name="play" size={20} color={colors.textWhite} />
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const isLast = index >= total - 1;
+  const currentItem = affirmations[index] || '';
+
+  return (
+    <View style={styles.gameContent}>
+      <View style={styles.progressIndicator}>
+        <Text style={styles.progressText}>
+          Affirmation {index + 1} sur {total}
+        </Text>
+      </View>
+
+      <View style={styles.categorizeSituationCard}>
+        <Text style={styles.categorizeSituationText}>{currentItem}</Text>
+      </View>
+
+      {!isLast && (
+        <TouchableOpacity
+          style={styles.tfNextButton}
+          onPress={handleNext}
+          testID="agree-or-not-next-button"
         >
           <Text style={styles.tfNextButtonText}>Suivant</Text>
           <Ionicons name="arrow-forward" size={18} color={colors.textWhite} />
