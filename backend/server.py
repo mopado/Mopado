@@ -100,6 +100,7 @@ class SeasonCreate(BaseModel):
 # Episode Models
 class Card(BaseModel):
     type: str  # "question", "activity", etc.
+    title: Optional[str] = None
     content: str
 
 class MiniGame(BaseModel):

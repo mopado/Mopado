@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 8 — VERIFIED all 4 requested Mopado modifications on mobile viewport (375x667). Backend: added /app/backend/tests/test_card_title.py — 3/3 relevant tests PASS: (1) POST /api/episodes accepts optional Card.title (backward-compatible), value persists on GET /api/episodes/{id}; (2) seeded episode 6a7916b6cb38fed6d2a62d46 returns cards[0]={title:'Réflexion', content:'Quelle est ta plus grande qualité ?'} and cards_after_game[0].title='Bilan'. Frontend: logged in as famille.test@mopado.fr, opened /session/6a7916b6cb38fed6d2a62d46, walked the full flow. CARDS: no heart icon rendered inside the card; title 'Réflexion' displayed at top of card in orange (primary) with underline separator, ABOVE content — screenshot /tmp/s1_card1.png confirms. LETTERS GAME: BEFORE 'Démarrer' → 'Nous avons terminé' NOT present, only instructions + dice + 'Démarrer' visible (/tmp/s2_before_game.png). AFTER 'Démarrer' → instructions text removed, 4 unique letters rendered (Y,O,C,G), message 'Chacun trouve une qualité pour un autre membre de la famille commençant par l'une des lettres' visible, AND 'Nous avons terminé' button now visible at bottom (/tmp/s3_after_demarrer.png). CLOSING screen: title = '1 mot pour résumer ce moment en famille ?' (old text absent), subtitle = 'Ce mot apparaîtra sur votre mur familial' (old text absent) — /tmp/s5_closing.png. Non-letters games: code review confirms useState(gameType !== 'letters') so terminate button is visible immediately for true_false/ranking/quiz/custom. Overall: 7/7 test cases PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_card_title.py",
+    "/app/test_reports/pytest/pytest_card_title.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "session/[episodeId].tsx is 1504 lines — exceeds the 700-line guideline. Consider splitting each step (Cards, Game sub-games, Closing, Reward) into separate files under app/session/steps/ for maintainability. Not a blocker for this iteration.",
+    "LettersGame useState initializer picks 4 letters via Math.floor+splice; correct and generates unique letters. No issue.",
+    "GameStepContent: showTerminateButton starts as (gameType !== 'letters'). For letters, when user re-enters the step (e.g., back-navigation), reveal state resets to false — expected because LettersGame local state also resets. Consistent behavior."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_card_title.py (created)"
+  ],
+  "success_rate": {"backend": "100% (3/3 relevant pytest cases)", "frontend": "100% (7/7 scenario checks)"},
+  "seed_data_creation": "test_card_title.py creates + deletes a TEST_ episode; no residual data. Seeded episode 6a7916b6cb38fed6d2a62d46 (Test Titres Cartes) was used read-only for frontend flow and remains as-is. A closing session was NOT completed during the frontend test (stopped at 'Terminer' button click to avoid mutating user state).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 4 modifications (card title, letters delayed reveal, closing title text, closing subtitle text) are live and verified end-to-end on the preview URL. Test episode 6a7916b6cb38fed6d2a62d46 is the canonical seed to exercise these features. Card.title is optional (backward compat) — existing episodes without title still render fine (verified in code: `card.title ? render : null`)."
+}

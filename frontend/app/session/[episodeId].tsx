@@ -24,6 +24,7 @@ const { width } = Dimensions.get('window');
 
 interface Card {
   type: string;
+  title?: string;
   content: string;
 }
 
@@ -396,13 +397,13 @@ function CardsStepContent({
         </View>
 
         <View style={styles.cardContainer}>
-          <View style={styles.cardDecoration}>
-            <Ionicons name="heart" size={20} color={colors.primary} />
-          </View>
+          {card.title ? (
+            <View style={styles.cardTitleContainer}>
+              <Text style={styles.cardTitle}>{card.title}</Text>
+              <View style={styles.cardTitleUnderline} />
+            </View>
+          ) : null}
           <Text style={styles.cardContent}>{card.content}</Text>
-          <View style={[styles.cardDecoration, styles.cardDecorationBottom]}>
-            <Ionicons name="heart" size={20} color={colors.primary} />
-          </View>
         </View>
 
         <View style={styles.cardMessageContainer}>
@@ -428,6 +429,7 @@ function GameStepContent({
   onNext: () => void;
 }) {
   const gameType = game.type || 'letters';
+  const [showTerminateButton, setShowTerminateButton] = useState(gameType !== 'letters');
 
   return (
     <View style={styles.stepContainer}>
@@ -437,28 +439,44 @@ function GameStepContent({
           <Text style={styles.gameTitle}>{game.name}</Text>
         </View>
 
-        <View style={styles.gameInstructions}>
-          <Text style={styles.gameInstructionsText}>{game.instructions}</Text>
-        </View>
+        {/* Show instructions only if NOT letters game, OR if letters game not yet revealed */}
+        {gameType !== 'letters' && (
+          <View style={styles.gameInstructions}>
+            <Text style={styles.gameInstructionsText}>{game.instructions}</Text>
+          </View>
+        )}
 
         {/* Render game type-specific content */}
-        {gameType === 'letters' && <LettersGame />}
+        {gameType === 'letters' && (
+          <LettersGame
+            instructions={game.instructions}
+            onReveal={() => setShowTerminateButton(true)}
+          />
+        )}
         {gameType === 'true_false' && <TrueFalseGame data={game.data} />}
         {gameType === 'ranking' && <RankingGame data={game.data} />}
         {gameType === 'quiz' && <QuizGame data={game.data} />}
         {gameType === 'custom' && <CustomGame />}
       </ScrollView>
 
-      <TouchableOpacity style={styles.continueButton} onPress={onNext}>
-        <Text style={styles.continueButtonText}>Nous avons terminé</Text>
-        <Ionicons name="checkmark" size={20} color={colors.textWhite} />
-      </TouchableOpacity>
+      {showTerminateButton && (
+        <TouchableOpacity style={styles.continueButton} onPress={onNext}>
+          <Text style={styles.continueButtonText}>Nous avons terminé</Text>
+          <Ionicons name="checkmark" size={20} color={colors.textWhite} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
 
 // Letters Game (C'est quali)
-function LettersGame() {
+function LettersGame({
+  instructions,
+  onReveal,
+}: {
+  instructions: string;
+  onReveal: () => void;
+}) {
   const [revealed, setRevealed] = useState(false);
   const [letters] = useState(() => {
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -473,24 +491,27 @@ function LettersGame() {
     return randomLetters;
   });
 
+  const handleReveal = () => {
+    setRevealed(true);
+    onReveal();
+  };
+
   if (!revealed) {
     return (
-      <>
-        <View style={styles.gameStartContainer}>
-          <Ionicons name="dice" size={80} color={colors.primary} />
-          <Text style={styles.gameStartText}>
-            Prêt à découvrir les 4 lettres ?
-          </Text>
-          <TouchableOpacity
-            style={styles.gameStartButton}
-            onPress={() => setRevealed(true)}
-            testID="start-letters-button"
-          >
-            <Text style={styles.gameStartButtonText}>Démarrer</Text>
-            <Ionicons name="play" size={20} color={colors.textWhite} />
-          </TouchableOpacity>
+      <View style={styles.gameStartContainer}>
+        <View style={styles.gameInstructions}>
+          <Text style={styles.gameInstructionsText}>{instructions}</Text>
         </View>
-      </>
+        <Ionicons name="dice" size={80} color={colors.primary} />
+        <TouchableOpacity
+          style={styles.gameStartButton}
+          onPress={handleReveal}
+          testID="start-letters-button"
+        >
+          <Text style={styles.gameStartButtonText}>Démarrer</Text>
+          <Ionicons name="play" size={20} color={colors.textWhite} />
+        </TouchableOpacity>
+      </View>
     );
   }
 
@@ -744,7 +765,7 @@ function ClosingStepContent({
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.closingHeader}>
           <Ionicons name="create" size={48} color={colors.primary} />
-          <Text style={styles.closingTitle}>Quel mot résume le mieux ce moment ?</Text>
+          <Text style={styles.closingTitle}>1 mot pour résumer ce moment en famille ?</Text>
         </View>
 
         <TextInput
@@ -770,7 +791,7 @@ function ClosingStepContent({
         <View style={styles.instructionCard}>
           <Ionicons name="heart" size={24} color={colors.accent} />
           <Text style={styles.instructionText}>
-            Ce mot restera dans votre mémoire familiale
+            Ce mot apparaîtra sur votre mur familial
           </Text>
         </View>
       </ScrollView>
@@ -1039,6 +1060,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 6,
+  },
+  cardTitleContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.primary,
+    textAlign: 'center',
+    letterSpacing: 0.5,
+  },
+  cardTitleUnderline: {
+    width: 40,
+    height: 3,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 2,
+    marginTop: 8,
   },
   cardDecoration: {
     marginBottom: 16,
