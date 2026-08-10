@@ -367,6 +367,7 @@ Ressenti | Qu'as-tu aimé dans ce moment ?"></textarea>
                             <option value="letters">Tirage de lettres (C'est quali)</option>
                             <option value="true_false">Vrai / Faux</option>
                             <option value="ranking">Classement</option>
+                            <option value="categorize">Catégorisation en 3 (Ami / Pote / Les 2, ...)</option>
                             <option value="quiz">Quiz (choix multiples)</option>
                             <option value="custom">Personnalisé</option>
                         </select>
@@ -400,6 +401,34 @@ Manger des légumes
 Aller au lit tôt"></textarea>
                             <p style="color: #7F8C8D; font-size: 12px; margin-top: 4px;">
                                 💡 La consigne du jeu sera automatiquement affichée avant les situations
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Categorize (3-way) specific fields -->
+                    <div id="categorize-fields" class="game-type-fields" style="display: none;">
+                        <div class="form-group">
+                            <label>Étiquette A *</label>
+                            <input type="text" id="episode-cat-label-a" placeholder="Ex: Ami">
+                        </div>
+                        <div class="form-group">
+                            <label>Étiquette B *</label>
+                            <input type="text" id="episode-cat-label-b" placeholder="Ex: Pote">
+                        </div>
+                        <div class="form-group">
+                            <label>Étiquette "les 2" *</label>
+                            <input type="text" id="episode-cat-label-both" value="Les 2" placeholder="Ex: Les 2">
+                        </div>
+                        <div class="form-group">
+                            <label>Situations (une par ligne, idéalement 6)</label>
+                            <textarea id="episode-cat-situations" placeholder="Il/elle m'écoute quand j'ai un problème
+On rigole bien ensemble à la récré
+On s'appelle même en vacances
+On se connait depuis peu
+On partage des secrets
+On fait juste du sport ensemble"></textarea>
+                            <p style="color: #7F8C8D; font-size: 12px; margin-top: 4px;">
+                                💡 Les situations apparaîtront une par une pendant le jeu, avec les 3 étiquettes en rappel.
                             </p>
                         </div>
                     </div>
@@ -550,6 +579,17 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
                     .filter(line => line.trim())
                     .map(line => line.trim());
                 data = { items };
+            } else if (type === 'categorize') {
+                const situations = document.getElementById('episode-cat-situations').value
+                    .split('\n')
+                    .filter(line => line.trim())
+                    .map(line => line.trim());
+                data = {
+                    label_a: document.getElementById('episode-cat-label-a').value.trim() || 'A',
+                    label_b: document.getElementById('episode-cat-label-b').value.trim() || 'B',
+                    label_both: document.getElementById('episode-cat-label-both').value.trim() || 'Les 2',
+                    situations,
+                };
             } else if (type === 'quiz') {
                 const questions = document.getElementById('episode-quiz-questions').value
                     .split('\n')
@@ -914,6 +954,12 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             } else if (g.type === 'ranking') {
                 document.getElementById('episode-ranking-items').value =
                     (g.data?.items || []).join('\n');
+            } else if (g.type === 'categorize') {
+                document.getElementById('episode-cat-label-a').value = g.data?.label_a || '';
+                document.getElementById('episode-cat-label-b').value = g.data?.label_b || '';
+                document.getElementById('episode-cat-label-both').value = g.data?.label_both || 'Les 2';
+                document.getElementById('episode-cat-situations').value =
+                    (g.data?.situations || []).join('\n');
             } else if (g.type === 'quiz') {
                 const lines = (g.data?.questions || [])
                     .map(q => `${q.question} | ${q.answers?.[0] || ''} | ${q.answers?.[1] || ''} | ${q.answers?.[2] || ''} | ${q.correct ?? 0}`)

@@ -533,7 +533,7 @@ async def complete_session(session_id: str, data: SessionComplete):
         session = await db.sessions.find_one({"_id": ObjectId(session_id)})
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        
+
         # Check if this session is already completed (prevent duplicate rewards)
         if session.get("completed"):
             return {
@@ -541,38 +541,51 @@ async def complete_session(session_id: str, data: SessionComplete):
                 "mopado_earned": 0,
                 "already_completed": True
             }
-        
+
+        family_id = session["family_id"]
+        episode_id = session["episode_id"]
+
+        # Check if user has ALREADY completed this episode before ANY write.
+        # This prevents rogue clients from injecting closing_word history
+        # for episodes the family has already finished.
+        user = await db.users.find_one({"_id": ObjectId(family_id)})
+        already_had_episode = bool(
+            user and episode_id in user.get("completed_episodes", [])
+        )
+
         # Calculate time spent
         start_time = session.get("start_time", datetime.utcnow())
         time_spent = int((datetime.utcnow() - start_time).total_seconds())
-        
-        # Update session
+
+        # Update session — only persist closing_word if this is a genuine
+        # first-time completion. Otherwise mark it complete without any word.
+        session_update = {
+            "completed": True,
+            "time_spent": time_spent,
+        }
+        if not already_had_episode:
+            session_update["closing_word"] = data.closing_word
+        else:
+            # Force-empty the closing word on retake so mur familial stays clean
+            session_update["closing_word"] = None
+
         await db.sessions.update_one(
             {"_id": ObjectId(session_id)},
-            {"$set": {
-                "completed": True,
-                "closing_word": data.closing_word,
-                "time_spent": time_spent
-            }}
+            {"$set": session_update}
         )
-        
+
         # Get episode to know reward amount
-        episode = await db.episodes.find_one({"_id": ObjectId(session["episode_id"])})
+        episode = await db.episodes.find_one({"_id": ObjectId(episode_id)})
         mopado_reward = episode.get("mopado_reward", 5) if episode else 5
-        
-        # Check if user has already completed this episode (prevent duplicate rewards)
-        family_id = session["family_id"]
-        episode_id = session["episode_id"]
-        
-        user = await db.users.find_one({"_id": ObjectId(family_id)})
-        if user and episode_id in user.get("completed_episodes", []):
+
+        if already_had_episode:
             # Episode already completed before - don't give rewards again
             return {
                 "message": "Session completed (episode already completed before)",
                 "mopado_earned": 0,
                 "already_completed": True
             }
-        
+
         # First time completing this episode - give rewards
         badges_earned = []
         if episode and episode.get("badge_name"):
@@ -580,20 +593,20 @@ async def complete_session(session_id: str, data: SessionComplete):
             # Check if user already has this badge
             if badge_name not in user.get("badges", []):
                 badges_earned.append(badge_name)
-        
+
         update_ops = {
             "$inc": {"mopado_dollars": mopado_reward},
             "$addToSet": {"completed_episodes": episode_id}
         }
-        
+
         if badges_earned:
             update_ops["$addToSet"]["badges"] = {"$each": badges_earned}
-        
+
         await db.users.update_one(
             {"_id": ObjectId(family_id)},
             update_ops
         )
-        
+
         return {
             "message": "Session completed",
             "mopado_earned": mopado_reward,

@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 14 review complete. CRITICAL syntax bug found and fixed in /app/frontend/app/session/[episodeId].tsx (duplicate '/>' on line 345 was crashing Metro bundler — the app was completely broken). After the fix, frontend loads, login works, and the session screen renders. Backend contract for iter-14 verified with 4 passing pytest tests + 1 xfail documenting a defense-in-depth backend issue.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "PUT /api/sessions/{session_id}/complete",
+        "issue": "The endpoint calls db.sessions.update_one() to persist closing_word BEFORE checking whether the user already completed the episode. A non-empty closing_word from a rogue/older client on the SECOND completion will still land in sessions and appear in /api/progress closing_words_history. The current frontend fix (send empty string when locked) hides this in practice, but backend defense-in-depth is missing. See test test_backend_defense_in_depth_second_run_with_nonempty_word (xfail). Move the already-completed check BEFORE the session update, or skip persisting closing_word when already completed."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "session/[episodeId].tsx",
+        "issue": "SYNTAX ERROR — duplicate '/>' on line 345 (ClosingStepContent had two self-closing tags stacked). Metro bundler failed to parse the file and the entire app was broken (blank screen). Fixed by removing the extra '/>'. Reference: /app/frontend/app/session/[episodeId].tsx:345",
+        "testID": "close-session-button",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration_14.py",
+    "/app/test_reports/pytest/pytest_iteration_14.xml"
+  ],
+  "action_items": [
+    "Main agent: acknowledge the syntax-error fix that was applied automatically by the testing agent (duplicate '/>' removal in session/[episodeId].tsx). Please retest the full user-visible flow manually or with the E2E suite because the app could not previously load.",
+    "Optional hardening: reorder complete_session in backend/server.py so the already-completed check runs BEFORE db.sessions.update_one(...). This ensures that even a malformed client cannot inject a duplicate closing_word into the mur familial. See xfail test test_backend_defense_in_depth_second_run_with_nonempty_word.",
+    "Verify full frontend session flow manually: first completion (+5 Mopado$, badge, bonus, closing), second completion (locked mot-de-fin card, 'Continuer' label, already-completed celebration), and post-PUT cleanup (fresh flow again). Backend contract is proven; UI-level exercise was skipped end-to-end due to length of the multi-step flow."
+  ],
+  "critical_code_review_comments": [
+    "JSX syntax bug on session/[episodeId].tsx line 345 (duplicate /> after ClosingStepContent) — CRITICAL, fixed by testing agent. The whole app was broken.",
+    "The lazy useState initializer for isAlreadyCompleted (lines 96-98) is a correct and idiomatic React fix for the reported issue — it freezes the value at mount so subsequent refreshUser() calls cannot flip the banner mid-session.",
+    "handleCompleteSession correctly allows empty closing_word when isAlreadyCompleted (line 190) — good.",
+    "ClosingStepContent 'locked' branch (lines 834-841) hides the TextInput and shows an info card; the CTA text switches to 'Continuer' (lines 884-886) — good UX.",
+    "Backend complete_session (server.py lines 550-574) writes the session document (including closing_word) BEFORE the already-completed guard. Move the guard earlier for defense-in-depth."
+  ],
+  "updated_files": [
+    "/app/frontend/app/session/[episodeId].tsx (removed duplicate '/>' on line 345 to unblock Metro bundler)",
+    "/app/backend/tests/test_iteration_14.py (new pytest file with 5 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (4/4 core tests pass; 1 xfail documents known defense-in-depth issue)",
+    "frontend": "smoke-tested only — app loads, login works, session screen opens, no banner for uncompleted episode. Full multi-step E2E flow not exercised by agent."
+  },
+  "seed_data_creation": "Each backend test registers a fresh account iter14-<uuid>@mopado.fr / pwd12345. No manual seeding required. The seeded famille.test@mopado.fr / test123 account was used for the frontend smoke test.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The syntax error in session/[episodeId].tsx has been fixed. The lazy-useState banner-freeze logic and the locked-mot-de-fin card were reviewed and look correct. Backend contract is proven by /app/backend/tests/test_iteration_14.py. If the reported bug reappears, first check /var/log/supervisor/expo.out.log for Babel parse errors, then run the pytest file to reconfirm the backend contract, then manually walk through the first-then-second-completion UI flow with a fresh iter14-<random>@mopado.fr account.",
+  "rca_of_issue": "ROOT CAUSE 1 (blocking): a stray duplicate '/>' after <ClosingStepContent ... /> on line 345 of session/[episodeId].tsx caused Babel to fail parsing the entire file. Metro bundler crashed and the app showed a blank screen — meaning the user COULD NOT reproduce the reported behaviour on the current code because nothing rendered. Fixed by removing the duplicate token.\n\nROOT CAUSE 2 (the originally reported iter-14 bug): the banner condition `user?.completed_episodes?.includes(episodeId)` was recomputed on every render. When `refreshUser()` ran after the first-time completion (server just appended the episode), the value flipped to true mid-celebration. The fix — a lazy `useState(() => user?.completed_episodes?.includes(episodeId) || false)` — freezes the value at mount time. This is a correct React idiom and the backend contract (verified) supports it: /api/sessions/complete tells the frontend already_completed=false on first run and =true on subsequent runs, but the banner no longer flips based on user.completed_episodes.\n\nMITIGATION: (a) fix syntax error (done), (b) let main agent verify end-to-end user flow, (c) optional backend hardening: move the already-completed check ahead of session.update_one() in complete_session() to prevent duplicate mot-de-fin entries from bad clients."
+}

@@ -1,0 +1,39 @@
+{
+  "summary": "All 3 iteration-16 fixes/features verified end-to-end on mobile viewport 390x844 and desktop 1280x1400 (admin). (1) Locked closing card text confirmed: reads 'Épisode déjà complété / Vous avez déjà partagé votre mot de fin pour cet épisode. Il apparaît sur votre mur familial.' — no occurrence of 'On ne le réécrit pas une deuxième fois' in the codebase (grep) and none in the rendered DOM. Verified via final-cc057b@mopado.fr deep-linked to the already-completed 'Mes amitiés' session — banner + locked card + 'Continuer' button (not 'Terminer') all correct. (2) New 'categorize' mini-game verified full flow: Démarrer start screen with instructions + 3 colored pills (Ami/Pote/Les 2) + testID start-categorize-button; Suivant progresses situations 1→6 via testID categorize-next-button; on situation 6 Suivant hides and 'Nous avons terminé' appears; onReachEnd correctly unlocks the terminate button; game name header shows 'Ami, pote ou les 2 ?'; cards_after_game (Bilan) → closing textarea → +5 Mopado$ celebration all working. (3) Home fallback verified: after completing 'Mes amitiés', home rotates to the next uncompleted episode 'Mes qualités' (profile shows 5 Mopado$, 1 badge, 1 episode) — the loop-through-seasons fallback is working. Could not observe the 'Tous les épisodes sont terminés' terminal state because the fresh account still has 'Mes qualités' pending. (4) Admin panel edit mode fully verified for 'Mes amitiés': title, game-type='categorize', dropdown label 'Catégorisation en 3 (Ami / Pote / Les 2, ...)', Label A='Ami', Label B='Pote', Label Les 2='Les 2', 6 situations in textarea, categorize-fields div display='block'. Cancel works.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration_14.py",
+    "/app/backend/tests/test_iteration_14_v2.py"
+  ],
+  "action_items": [
+    "None blocking. Main agent may proceed.",
+    "Optional (nice-to-have): the lock-b5395b@mopado.fr test account referenced in the review has been reset (completed_episodes=[]) since iteration 15. Locked-closing verification here was done with final-cc057b@mopado.fr after completing 'Mes amitiés'. Consider re-seeding lock-b5395b with a completed Mes qualités if you want the credential to stay usable for the deep-link locked-card smoke.",
+    "Optional (non-blocking): admin.html loadEpisodes() and loadSeasonsForSelect() log 'TypeError: Failed to fetch' on initial page load (before the tab is switched). The Épisodes tab still works after switching because a fresh fetch is triggered. Consider making the initial fetches resilient (await ordering or a retry) — but this does not affect end-user admin flow."
+  ],
+  "critical_code_review_comments": [
+    "session/[episodeId].tsx line 973: locked-card copy is exactly the requested wording ('Vous avez déjà partagé votre mot de fin pour cet épisode. Il apparaît sur votre mur familial.'). No occurrence of 'On ne le réécrit' anywhere in the codebase — clean removal.",
+    "CategorizeGame component (session/[episodeId].tsx lines ~750-870) implements onReachEnd correctly: (a) handleStart called with total<=1 triggers onReachEnd immediately (edge case), (b) handleNext triggers onReachEnd only when nextIdx === total - 1 (situation 6 index 5), (c) Suivant button hidden via `!isLast` on the last situation, (d) 'Nous avons terminé' is gated at the ParentGameContent level (hidesTerminate + reachedEnd), which we observed working correctly.",
+    "hidesTerminate correctly extended to include 'categorize' (line 512): const hidesTerminate = gameType === 'letters' || gameType === 'ranking' || gameType === 'categorize';",
+    "admin.html editEpisode() correctly branches on g.type === 'categorize' (lines 957-963), populates all 3 labels + situations textarea, and toggles the display of #categorize-fields. Verified in DOM.",
+    "Backend accepts mini_game.data as Dict[str, Any] with no schema change — episode 6a79b6807fc84413b7b24996 persisted the categorize payload intact (verified via GET /api/episodes/{id}: 6 situations + 3 labels present)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (episode GET returns expected categorize structure; login/session/completion endpoints all working)",
+    "frontend": "100% (all 4 review-request checkpoints pass on 390x844)"
+  },
+  "seed_data_creation": "No seeding created by this run. Episode 'Mes amitiés' (id=6a79b6807fc84413b7b24996) was already seeded by main agent E1. During the categorize walkthrough on final-cc057b@mopado.fr, that account earned +5 Mopado$, 1 'Ami sincère' badge, and 1 completed episode. This is expected and matches the flow — no cleanup needed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 16 features fully verified. If you need to re-verify the locked-card copy without completing an episode: use final-cc057b@mopado.fr with deep-link /session/6a79b6807fc84413b7b24996?seasonId=6a78e7a45f87998d7ed8e2c3 (Mes amitiés is already in this account's completed_episodes). Walk through with buttons Continuer → Suivant → Démarrer (testID start-categorize-button) → Suivant x5 → 'Nous avons terminé' → Suivant → arrive at locked closing card. To test the 'Tous les épisodes sont terminés' state: complete every episode in Saison test (currently 3 episodes) with a single account, then log in fresh — home should show the terminal message; this was NOT observed in this run because final-cc057b still has 'Mes qualités' pending. Admin panel: use JS editEpisode('6a79b6807fc84413b7b24996') after switching to Épisodes tab (showTab('episodes')) — the fallback-parent selector strategy is brittle because the DOM does not use an obvious .episode-card class. Prefer calling editEpisode(id) directly.",
+  "rca_of_issue": "N/A — this iteration was a confirmation-only run of 3 fixes; no bugs were found."
+}

@@ -88,12 +88,33 @@ export default function SessionScreen() {
   // completion requests before React re-renders the disabled state.
   const isCompletingRef = useRef(false);
   
-  // Detect if episode is already completed BEFORE starting the session
-  const isAlreadyCompleted = user?.completed_episodes?.includes(episodeId as string) || false;
+  // Detect if episode is already completed BEFORE this session started.
+  // We freeze this value the first time `user` becomes available so that:
+  //  - deep-link/refresh works (user hydrates async from storage after mount)
+  //  - refreshUser() post-completion does NOT flip the banner ON mid-session
+  const [isAlreadyCompleted, setIsAlreadyCompleted] = useState(false);
+  const alreadyCompletedInitRef = useRef(false);
+  useEffect(() => {
+    if (!alreadyCompletedInitRef.current && user && episodeId) {
+      setIsAlreadyCompleted(
+        (user.completed_episodes || []).includes(episodeId as string)
+      );
+      alreadyCompletedInitRef.current = true;
+    }
+  }, [user, episodeId]);
 
   useEffect(() => {
     loadEpisode();
   }, [episodeId]);
+
+  // Kick off the /sessions/start call as soon as BOTH the user (from
+  // AuthContext) AND the episode are hydrated. Handles the deep-link case
+  // where the user object arrives async after the initial mount.
+  useEffect(() => {
+    if (user && episode && !sessionId) {
+      startSession(episode.season_id);
+    }
+  }, [user, episode, sessionId]);
 
   const loadEpisode = async () => {
     try {
@@ -101,7 +122,8 @@ export default function SessionScreen() {
       if (response.ok) {
         const data = await response.json();
         setEpisode(data);
-        await startSession(data.season_id);
+        // Session start is now handled by the useEffect above once `user` is
+        // available. This avoids a race where user is still null on mount.
       } else {
         Alert.alert('Erreur', 'Impossible de charger l\'épisode');
         router.back();
@@ -179,7 +201,9 @@ export default function SessionScreen() {
     // updates on next render, so we use a ref to block re-entry immediately.
     if (isCompletingRef.current) return;
 
-    if (!closingWord.trim()) {
+    // When the episode is already completed, we skip the "mot de fin"
+    // requirement — the user is just retraversing the flow.
+    if (!isAlreadyCompleted && !closingWord.trim()) {
       setClosingError("Choisissez d'abord un mot");
       return;
     }
@@ -198,7 +222,7 @@ export default function SessionScreen() {
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ closing_word: closingWord }),
+          body: JSON.stringify({ closing_word: closingWord || '' }),
         }
       );
 
@@ -332,6 +356,7 @@ export default function SessionScreen() {
           error={closingError}
           onComplete={handleCompleteSession}
           isCompleting={isCompleting}
+          locked={isAlreadyCompleted}
         />
       )}
 
@@ -482,10 +507,10 @@ function GameStepContent({
   onNext: () => void;
 }) {
   const gameType = game.type || 'letters';
-  // For letters and ranking, hide the button until reveal
-  const [showTerminateButton, setShowTerminateButton] = useState(
-    gameType !== 'letters' && gameType !== 'ranking'
-  );
+  // For letters/ranking/categorize, hide the "Nous avons terminé" button
+  // until the family has actually reached the end.
+  const hidesTerminate = gameType === 'letters' || gameType === 'ranking' || gameType === 'categorize';
+  const [showTerminateButton, setShowTerminateButton] = useState(!hidesTerminate);
 
   return (
     <View style={styles.stepContainer}>
@@ -495,8 +520,8 @@ function GameStepContent({
           <Text style={styles.gameTitle}>{game.name}</Text>
         </View>
 
-        {/* Show instructions only if NOT letters/ranking game (they show their own) */}
-        {gameType !== 'letters' && gameType !== 'ranking' && (
+        {/* Show instructions only if NOT letters/ranking/categorize (they show their own) */}
+        {!hidesTerminate && (
           <View style={styles.gameInstructions}>
             <Text style={styles.gameInstructionsText}>{game.instructions}</Text>
           </View>
@@ -515,6 +540,13 @@ function GameStepContent({
             instructions={game.instructions}
             data={game.data}
             onReveal={() => setShowTerminateButton(true)}
+          />
+        )}
+        {gameType === 'categorize' && (
+          <CategorizeGame
+            instructions={game.instructions}
+            data={game.data}
+            onReachEnd={() => setShowTerminateButton(true)}
           />
         )}
         {gameType === 'quiz' && <QuizGame data={game.data} />}
@@ -725,6 +757,118 @@ function RankingGame({
   );
 }
 
+// Categorize Game (Ami / Pote / Les 2, Salé / Sucré / Les 2, etc.)
+// Configurable 3-way categorization: 6 situations shown one by one, the
+// family discusses which of the 3 labels fits best.
+function CategorizeGame({
+  instructions,
+  data,
+  onReachEnd,
+}: {
+  instructions: string;
+  data?: any;
+  onReachEnd: () => void;
+}) {
+  const [started, setStarted] = useState(false);
+  const [index, setIndex] = useState(0);
+
+  const situations: string[] = data?.situations || [];
+  const labelA: string = data?.label_a || 'A';
+  const labelB: string = data?.label_b || 'B';
+  const labelBoth: string = data?.label_both || 'Les 2';
+  const total = situations.length;
+
+  const handleStart = () => {
+    setStarted(true);
+    if (total <= 1) onReachEnd();
+  };
+
+  const handleNext = () => {
+    const nextIdx = index + 1;
+    if (nextIdx < total) {
+      setIndex(nextIdx);
+      if (nextIdx === total - 1) onReachEnd();
+    }
+  };
+
+  if (!started) {
+    return (
+      <View style={styles.gameStartContainer}>
+        <View style={styles.gameInstructions}>
+          <Text style={styles.gameInstructionsText}>{instructions}</Text>
+        </View>
+        <View style={styles.categorizeLabelsRow}>
+          <View style={[styles.categorizeLabelPill, { backgroundColor: colors.primary }]}>
+            <Text style={styles.categorizeLabelText}>{labelA}</Text>
+          </View>
+          <View style={[styles.categorizeLabelPill, { backgroundColor: colors.accent }]}>
+            <Text style={styles.categorizeLabelText}>{labelB}</Text>
+          </View>
+          <View style={[styles.categorizeLabelPill, { backgroundColor: colors.secondary }]}>
+            <Text style={styles.categorizeLabelText}>{labelBoth}</Text>
+          </View>
+        </View>
+        <Ionicons name="chatbubbles" size={72} color={colors.primary} />
+        <TouchableOpacity
+          style={styles.gameStartButton}
+          onPress={handleStart}
+          testID="start-categorize-button"
+        >
+          <Text style={styles.gameStartButtonText}>Démarrer</Text>
+          <Ionicons name="play" size={20} color={colors.textWhite} />
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const isLast = index >= total - 1;
+  const currentSituation = situations[index] || '';
+
+  return (
+    <View style={styles.gameContent}>
+      <View style={styles.progressIndicator}>
+        <Text style={styles.progressText}>
+          Situation {index + 1} sur {total}
+        </Text>
+      </View>
+
+      <View style={styles.categorizeSituationCard}>
+        <Text style={styles.categorizeSituationText}>{currentSituation}</Text>
+      </View>
+
+      <View style={styles.categorizeLabelsRow}>
+        <View style={[styles.categorizeLabelPill, { backgroundColor: colors.primary }]}>
+          <Text style={styles.categorizeLabelText}>{labelA}</Text>
+        </View>
+        <View style={[styles.categorizeLabelPill, { backgroundColor: colors.accent }]}>
+          <Text style={styles.categorizeLabelText}>{labelB}</Text>
+        </View>
+        <View style={[styles.categorizeLabelPill, { backgroundColor: colors.secondary }]}>
+          <Text style={styles.categorizeLabelText}>{labelBoth}</Text>
+        </View>
+      </View>
+
+      <View style={styles.categorizeHintRow}>
+        <Ionicons name="chatbubble-ellipses" size={16} color={colors.textSecondary} />
+        <Text style={styles.categorizeHintText}>
+          Chacun donne son avis et explique pourquoi
+        </Text>
+      </View>
+
+      {!isLast && (
+        <TouchableOpacity
+          style={styles.tfNextButton}
+          onPress={handleNext}
+          testID="categorize-next-button"
+        >
+          <Text style={styles.tfNextButtonText}>Suivant</Text>
+          <Ionicons name="arrow-forward" size={18} color={colors.textWhite} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
 // Quiz Game
 function QuizGame({ data }: { data?: any }) {
   const questions = data?.questions || [];
@@ -801,50 +945,64 @@ function ClosingStepContent({
   error,
   onComplete,
   isCompleting,
+  locked = false,
 }: {
   closingWord: string;
   setClosingWord: (text: string) => void;
   error: string;
   onComplete: () => void;
   isCompleting: boolean;
+  locked?: boolean;
 }) {
   return (
     <KeyboardAvoidingView
       style={styles.stepContainer}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.closingHeader}>
           <Ionicons name="create" size={48} color={colors.primary} />
           <Text style={styles.closingTitle}>1 mot pour résumer ce moment en famille ?</Text>
         </View>
 
-        <TextInput
-          style={[styles.closingInput, error && styles.closingInputError]}
-          placeholder="Écrivez votre mot ici..."
-          placeholderTextColor={colors.textSecondary}
-          value={closingWord}
-          onChangeText={(text) => {
-            setClosingWord(text);
-          }}
-          multiline
-          maxLength={200}
-          autoFocus
-        />
-
-        {error ? (
-          <View style={styles.closingErrorContainer}>
-            <Ionicons name="warning" size={18} color={colors.error} />
-            <Text style={styles.closingErrorText}>{error}</Text>
+        {locked ? (
+          <View style={styles.closingLockedCard}>
+            <Ionicons name="lock-closed" size={32} color={colors.info} />
+            <Text style={styles.closingLockedTitle}>Épisode déjà complété</Text>
+            <Text style={styles.closingLockedText}>
+              Vous avez déjà partagé votre mot de fin pour cet épisode. Il apparaît sur votre mur familial.
+            </Text>
           </View>
-        ) : null}
+        ) : (
+          <>
+            <TextInput
+              style={[styles.closingInput, error && styles.closingInputError]}
+              placeholder="Écrivez votre mot ici..."
+              placeholderTextColor={colors.textSecondary}
+              value={closingWord}
+              onChangeText={(text) => {
+                setClosingWord(text);
+              }}
+              multiline
+              maxLength={200}
+              autoFocus
+            />
 
-        <View style={styles.instructionCard}>
-          <Ionicons name="heart" size={24} color={colors.accent} />
-          <Text style={styles.instructionText}>
-            Ce mot apparaîtra sur votre mur familial
-          </Text>
-        </View>
+            {error ? (
+              <View style={styles.closingErrorContainer}>
+                <Ionicons name="warning" size={18} color={colors.error} />
+                <Text style={styles.closingErrorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.instructionCard}>
+              <Ionicons name="heart" size={24} color={colors.accent} />
+              <Text style={styles.instructionText}>
+                Ce mot apparaîtra sur votre mur familial
+              </Text>
+            </View>
+          </>
+        )}
       </ScrollView>
 
       <TouchableOpacity
@@ -857,8 +1015,14 @@ function ClosingStepContent({
           <ActivityIndicator color={colors.textWhite} />
         ) : (
           <>
-            <Text style={styles.continueButtonText}>Terminer</Text>
-            <Ionicons name="checkmark-circle" size={20} color={colors.textWhite} />
+            <Text style={styles.continueButtonText}>
+              {locked ? 'Continuer' : 'Terminer'}
+            </Text>
+            <Ionicons
+              name={locked ? 'arrow-forward' : 'checkmark-circle'}
+              size={20}
+              color={colors.textWhite}
+            />
           </>
         )}
       </TouchableOpacity>
@@ -1465,6 +1629,56 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
   },
+  // Categorize game styles
+  categorizeSituationCard: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: colors.primaryLight,
+    minHeight: 120,
+    justifyContent: 'center',
+  },
+  categorizeSituationText: {
+    fontSize: 20,
+    color: colors.text,
+    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 28,
+    fontStyle: 'italic',
+  },
+  categorizeLabelsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  categorizeLabelPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  categorizeLabelText: {
+    color: colors.textWhite,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  categorizeHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  categorizeHintText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
   // Ranking Game styles
   rankingQuestion: {
     backgroundColor: colors.primaryLight,
@@ -1585,6 +1799,29 @@ const styles = StyleSheet.create({
     minHeight: 150,
     textAlignVertical: 'top',
     marginBottom: 24,
+  },
+  closingLockedCard: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: colors.info,
+  },
+  closingLockedTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.info,
+    marginTop: 12,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  closingLockedText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   celebrationContent: {
     justifyContent: 'center',

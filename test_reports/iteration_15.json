@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 14 v2 fixes CONFIRMED. All 3 user-reported issues from iteration 14 are resolved end-to-end. Backend 9/9 tests passing (5 original iter-14 + 4 new v2 hardening tests). Frontend flow verified on mobile viewport 390x844 for both scenarios: (1) fresh account 'final-cc057b@mopado.fr' completes 'La colère' with NO banner anywhere and celebration shows '+5 Mopado$ / …parce que tu as su voir ta colère autrement !'; (2) locked account 'lock-b5395b@mopado.fr' deep-links to already-completed 'Mes qualités' and sees banner from start, locked card 'Épisode déjà complété / Vous avez déjà partagé votre mot de fin...' on closing step (no TextInput visible), 'Continuer' button (not Terminer), and celebration with 'Aucun Mopado$ ni badge à gagner cette fois-ci'. Deep-link 'Session invalide' bug is fixed: Continuer worked without error. The previously-xfailed backend defense-in-depth test now PASSES — rogue non-empty closing_word on second run is NULL-ified in DB and NEVER appears in /api/progress closing_words_history.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration_14.py",
+    "/app/backend/tests/test_iteration_14_v2.py",
+    "/app/test_reports/pytest/pytest_iteration_14_v2.xml"
+  ],
+  "action_items": [
+    "No blocking action items. The v2 fix set is complete and verified. Main agent may proceed with the next work item.",
+    "Optional (nice-to-have, non-blocking): consider adding a testID='closing-word-input' to the closing-step TextInput and testID='terminer-button' / 'continuer-button' to the CTA in session/[episodeId].tsx. Placeholder-based selectors work but are brittle. Applies to any future automated UI tests."
+  ],
+  "critical_code_review_comments": [
+    "Backend server.py::complete_session (lines 530-620) now correctly checks user.completed_episodes BEFORE writing closing_word, and force-nulls the word on retake. Defense-in-depth is complete.",
+    "Frontend session/[episodeId].tsx uses useEffect + alreadyCompletedInitRef (lines 95-104) to snapshot isAlreadyCompleted once when user hydrates. This is a correct pattern for the deep-link + refresh case (lazy useState init would not have worked because user is null at first render on deep-link).",
+    "startSession is now called from a dedicated useEffect (lines 113-117) that waits for both `user` AND `episode` — fixes the 'Session invalide' race on deep-link cold-open.",
+    "ClosingStepContent locked branch and 'Continuer' label switch work end-to-end (verified visually).",
+    "Frontend still sends body {closing_word: closingWord || ''} on retake (line 225). Even though backend now null-guards this, keeping the client behaviour is fine — backend is the source of truth."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration_14_v2.py (new — 4 tests for v2 hardening)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 original iter-14 tests pass; 4/4 new v2 tests pass — total 9/9)",
+    "frontend": "100% end-to-end verified for both flows (fresh + locked) on 390x844 mobile viewport"
+  },
+  "seed_data_creation": "No seeding needed. Used the two accounts provided in the review request (final-cc057b@mopado.fr and lock-b5395b@mopado.fr). Each backend test uses a fresh iter14v2-<uuid>@mopado.fr account.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The v2 fixes for iteration 14 are fully verified. If regressions appear later, run pytest /app/backend/tests/test_iteration_14.py /app/backend/tests/test_iteration_14_v2.py to reconfirm the backend contract, then re-run the frontend smoke by (a) logging in as lock-b5395b@mopado.fr, deep-linking to /session/6a7920b673e294da877d8c35?seasonId=6a78e7a45f87998d7ed8e2c3, and verifying the banner + locked card + Continuer button; (b) creating a fresh account or resetting an existing one, then completing 'La colère' from Home and verifying NO banner appears at any step including celebration. The Nous avons terminé button (mini-game end) is required in the walk-through label list; miss it and the flow stalls at step 5.",
+  "rca_of_issue": "Not applicable — this iteration was a confirmation-only run, not a bug-hunt. Previous RCA (iteration 14) documented (a) the recomputed-on-render isAlreadyCompleted (fixed in v2 by useEffect+useRef), (b) startSession called too early before user hydration (fixed in v2 by dedicated useEffect gated on user+episode), and (c) missing backend guard against rogue clients (fixed in v2 by moving the already-completed check ahead of the session update and force-nulling closing_word on retake)."
+}
