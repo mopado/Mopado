@@ -392,15 +392,14 @@ Rire fait du bien | vrai"></textarea>
                     <!-- Ranking specific fields -->
                     <div id="ranking-fields" class="game-type-fields" style="display: none;">
                         <div class="form-group">
-                            <label>Question de classement</label>
-                            <input type="text" id="episode-ranking-question" placeholder="Ex: Classe ces choses selon ce qui t'énerve le plus">
-                        </div>
-                        <div class="form-group">
-                            <label>Éléments à classer (un par ligne)</label>
+                            <label>Situations à afficher (une par ligne)</label>
                             <textarea id="episode-ranking-items" placeholder="Faire mes devoirs
 Ranger ma chambre
 Manger des légumes
 Aller au lit tôt"></textarea>
+                            <p style="color: #7F8C8D; font-size: 12px; margin-top: 4px;">
+                                💡 La consigne du jeu sera automatiquement affichée avant les situations
+                            </p>
                         </div>
                     </div>
                     
@@ -522,12 +521,11 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
                     });
                 data = { statements };
             } else if (type === 'ranking') {
-                const question = document.getElementById('episode-ranking-question').value;
                 const items = document.getElementById('episode-ranking-items').value
                     .split('\n')
                     .filter(line => line.trim())
                     .map(line => line.trim());
-                data = { question, items };
+                data = { items };
             } else if (type === 'quiz') {
                 const questions = document.getElementById('episode-quiz-questions').value
                     .split('\n')

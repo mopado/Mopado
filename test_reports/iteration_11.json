@@ -1,0 +1,36 @@
+{
+  "summary": "Ranking mini-game revamp verified end-to-end (frontend only, per request). Test episode 6a792784202395ef43859ca1 ('Test Ranking') data structure is correct: mini_game.type='ranking', data={items:[3 items]}, instructions holds the merged consigne, and NO 'question' field is present. Frontend behavior verified on mobile viewport (390x844): (1) Pre-Démarrer screen shows title + instructions ('Parmi ces 3 situations, lesquelles t énervent le plus ?') + list icon + Démarrer button, and 'Nous avons terminé' is NOT visible. (2) After tapping Démarrer, items are rendered as a static list with a small orange bullet (ellipse icon) before each item text: NO numbered badges (1,2,3), NO up/down arrows, no chevron-up/chevron-down in DOM, no standalone '1'/'2'/'3' text nodes. (3) Clicking an item does NOT reorder the list — order remains stable (Devoir faire ses devoirs < Perdre au foot < Se faire embêter). (4) 'Nous avons terminé' bottom button appears after reveal and advances the session to the closing 'mot pour résumer' step. (5) Non-regression: Letters game (episode 'Mes qualités') still uses the same Démarrer flow and reveals 4 letters + terminate button. (6) Admin panel at /api/admin-panel → Épisodes tab → ranking type: only 'Situations à afficher' textarea (#episode-ranking-items) is shown; the legacy 'Question de classement' label and #episode-ranking-question input are BOTH removed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (shadow*)", "issue": "Existing (pre-change) console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Not introduced by this change. Reference: /app/frontend/app/session/[episodeId].tsx and shared components."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_11.json"
+  ],
+  "action_items": [
+    "None required for this task — all 6 acceptance criteria pass. (Optional carry-over from iter_10: migrate shadow* → boxShadow.)",
+    "Note: true_false / quiz / custom mini_game types were NOT dynamically exercised (no seeded episodes of those types in Saison test). Code inspection of GameStepContent/TrueFalseGame/QuizGame/CustomGame confirms they were not modified by this change and still render as before. If runtime regression coverage is desired, seed an episode per type."
+  ],
+  "critical_code_review_comments": [
+    "RankingGame (session/[episodeId].tsx:636-682) correctly (a) reads instructions from props (merged consigne), (b) reads items from data.items only, (c) gates items behind revealed state, (d) fires onReveal() so parent GameStepContent flips showTerminateButton=true.",
+    "GameStepContent (session/[episodeId].tsx:442-444) initializes showTerminateButton=false for both 'letters' AND 'ranking' — consistent parity between the two Démarrer-gated games.",
+    "rankingItemSimple style (session/[episodeId].tsx:1380) replaces the old numbered rankingItem with a subtle-border, non-interactive row containing an ellipse bullet — matches the spec.",
+    "admin.html (392-404, 517-528) removed the 'Question de classement' input; POST payload for ranking type now sends only { data: { items } }, matching the new backend expectation.",
+    "Instruction rendering is de-duplicated: GameStepContent skips the shared gameInstructions block for letters/ranking (line 455), delegating to the game's own pre-reveal screen — avoids showing instructions twice."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only task; data endpoint spot-checked, correct)", "frontend": "100% (6/6 acceptance criteria verified)"},
+  "seed_data_creation": "Used existing seed: episode 6a792784202395ef43859ca1 (ranking) and 6a7920b673e294da877d8c35 (letters, for non-regression) in Saison test. No new data created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Ranking flow now mirrors letters flow: instructions + Démarrer, then reveal + 'Nous avons terminé'. Items are displayed as a plain bulleted list (orange ellipse, no numbers, no arrows, not reorderable). Admin panel has only the 'Situations à afficher' textarea for ranking. Only 2 episodes exist in Saison test (letters + ranking); to regression-test true_false/quiz/custom seed via admin. Public URL: EXPO_PUBLIC_BACKEND_URL=https://mopado-family-1.preview.emergentagent.com. Test account: famille.test@mopado.fr / test123 has 'Mes qualités' in completed_episodes (banner shown) and NOT 'Test Ranking'.",
+  "rca_of_issue": "N/A — feature verification (no bug). Every acceptance criterion in the review request was reproduced live in the preview and matches the spec described by main agent E1."
+}

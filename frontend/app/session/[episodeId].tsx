@@ -438,7 +438,10 @@ function GameStepContent({
   onNext: () => void;
 }) {
   const gameType = game.type || 'letters';
-  const [showTerminateButton, setShowTerminateButton] = useState(gameType !== 'letters');
+  // For letters and ranking, hide the button until reveal
+  const [showTerminateButton, setShowTerminateButton] = useState(
+    gameType !== 'letters' && gameType !== 'ranking'
+  );
 
   return (
     <View style={styles.stepContainer}>
@@ -448,8 +451,8 @@ function GameStepContent({
           <Text style={styles.gameTitle}>{game.name}</Text>
         </View>
 
-        {/* Show instructions only if NOT letters game, OR if letters game not yet revealed */}
-        {gameType !== 'letters' && (
+        {/* Show instructions only if NOT letters/ranking game (they show their own) */}
+        {gameType !== 'letters' && gameType !== 'ranking' && (
           <View style={styles.gameInstructions}>
             <Text style={styles.gameInstructionsText}>{game.instructions}</Text>
           </View>
@@ -463,7 +466,13 @@ function GameStepContent({
           />
         )}
         {gameType === 'true_false' && <TrueFalseGame data={game.data} />}
-        {gameType === 'ranking' && <RankingGame data={game.data} />}
+        {gameType === 'ranking' && (
+          <RankingGame
+            instructions={game.instructions}
+            data={game.data}
+            onReveal={() => setShowTerminateButton(true)}
+          />
+        )}
         {gameType === 'quiz' && <QuizGame data={game.data} />}
         {gameType === 'custom' && <CustomGame />}
       </ScrollView>
@@ -624,52 +633,48 @@ function TrueFalseGame({ data }: { data?: any }) {
 }
 
 // Ranking Game
-function RankingGame({ data }: { data?: any }) {
-  const initialItems = data?.items || [];
-  const [items, setItems] = useState<string[]>(initialItems);
-  const question = data?.question || 'Classe ces éléments';
+function RankingGame({
+  instructions,
+  data,
+  onReveal,
+}: {
+  instructions: string;
+  data?: any;
+  onReveal: () => void;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const items: string[] = data?.items || [];
 
-  const moveUp = (index: number) => {
-    if (index === 0) return;
-    const newItems = [...items];
-    [newItems[index - 1], newItems[index]] = [newItems[index], newItems[index - 1]];
-    setItems(newItems);
+  const handleReveal = () => {
+    setRevealed(true);
+    onReveal();
   };
 
-  const moveDown = (index: number) => {
-    if (index === items.length - 1) return;
-    const newItems = [...items];
-    [newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]];
-    setItems(newItems);
-  };
+  if (!revealed) {
+    return (
+      <View style={styles.gameStartContainer}>
+        <View style={styles.gameInstructions}>
+          <Text style={styles.gameInstructionsText}>{instructions}</Text>
+        </View>
+        <Ionicons name="list" size={80} color={colors.primary} />
+        <TouchableOpacity
+          style={styles.gameStartButton}
+          onPress={handleReveal}
+          testID="start-ranking-button"
+        >
+          <Text style={styles.gameStartButtonText}>Démarrer</Text>
+          <Ionicons name="play" size={20} color={colors.textWhite} />
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.gameContent}>
-      <View style={styles.rankingQuestion}>
-        <Text style={styles.rankingQuestionText}>{question}</Text>
-      </View>
       {items.map((item, index) => (
-        <View key={`${item}-${index}`} style={styles.rankingItem}>
-          <View style={styles.rankingBadge}>
-            <Text style={styles.rankingBadgeText}>{index + 1}</Text>
-          </View>
+        <View key={`${item}-${index}`} style={styles.rankingItemSimple}>
+          <Ionicons name="ellipse" size={8} color={colors.primary} style={{ marginRight: 12 }} />
           <Text style={styles.rankingText}>{item}</Text>
-          <View style={styles.rankingArrows}>
-            <TouchableOpacity
-              onPress={() => moveUp(index)}
-              disabled={index === 0}
-              style={[styles.rankingArrow, index === 0 && styles.rankingArrowDisabled]}
-            >
-              <Ionicons name="chevron-up" size={20} color={index === 0 ? colors.textLight : colors.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => moveDown(index)}
-              disabled={index === items.length - 1}
-              style={[styles.rankingArrow, index === items.length - 1 && styles.rankingArrowDisabled]}
-            >
-              <Ionicons name="chevron-down" size={20} color={index === items.length - 1 ? colors.textLight : colors.primary} />
-            </TouchableOpacity>
-          </View>
         </View>
       ))}
     </View>
@@ -1371,6 +1376,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
+  },
+  rankingItemSimple: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
   },
   rankingBadge: {
     width: 32,
