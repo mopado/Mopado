@@ -96,6 +96,26 @@ class SeasonCreate(BaseModel):
     description: str
     image_base64: Optional[str] = None
     order: int
+    expected_episodes: Optional[int] = 10
+
+# Season quiz question types:
+#   { type: 'mcq', question: str, answers: [str], correct_index: int }
+#   { type: 'true_false', question: str, correct: bool }
+#   { type: 'ranking', question: str, items: [str] }  # ranked in correct order
+class SeasonQuizPayload(BaseModel):
+    questions: List[Dict[str, Any]]
+    badge_name: Optional[str] = None
+    badge_description: Optional[str] = None
+    publish: bool = True  # sets/refreshes quiz_published_at
+
+
+class SeasonQuizComplete(BaseModel):
+    family_id: str
+    # answers is a list aligned with questions[]
+    #   MCQ: int (chosen index)
+    #   TF:  bool
+    #   Ranking: list of ints (the user's ordering of the items array)
+    answers: List[Any]
 
 # Episode Models
 class Card(BaseModel):
@@ -391,6 +411,229 @@ async def delete_season(season_id: str):
         return {"message": "Season deleted"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ==================== SEASON QUIZ ====================
+
+QUIZ_AVAILABILITY_DAYS = 7
+QUIZ_MOPADO_PER_CORRECT = 2
+QUIZ_PASSING_RATIO = 0.6  # >60% required for the badge (7/10 for 10 questions)
+
+
+def _quiz_availability(season_doc: dict, user_doc: Optional[dict]) -> Dict[str, Any]:
+    quiz = season_doc.get("quiz") or {}
+    published_at = season_doc.get("quiz_published_at")
+    total_expected = int(season_doc.get("expected_episodes") or 0)
+
+    has_quiz = bool(quiz.get("questions"))
+    is_published = published_at is not None
+    now = datetime.utcnow()
+
+    within_window = False
+    days_remaining = 0
+    if is_published:
+        elapsed = (now - published_at).days
+        within_window = elapsed < QUIZ_AVAILABILITY_DAYS
+        days_remaining = max(0, QUIZ_AVAILABILITY_DAYS - elapsed)
+
+    # Family must have completed enough episodes of this season to unlock
+    already_taken = False
+    if user_doc:
+        already_taken = str(season_doc["_id"]) in (user_doc.get("completed_quizzes") or [])
+
+    return {
+        "has_quiz": has_quiz,
+        "is_published": is_published,
+        "within_window": within_window,
+        "days_remaining": days_remaining,
+        "already_taken": already_taken,
+        "available": has_quiz and is_published and within_window and not already_taken,
+        "total_expected": total_expected,
+    }
+
+
+@api_router.put("/seasons/{season_id}/quiz")
+async def upsert_season_quiz(season_id: str, payload: SeasonQuizPayload):
+    """Create/update the quiz for a season. Optionally publishes it (sets
+    quiz_published_at = now) so the 7-day availability window starts.
+    """
+    try:
+        season = await db.seasons.find_one({"_id": ObjectId(season_id)})
+        if not season:
+            raise HTTPException(status_code=404, detail="Season not found")
+
+        update = {
+            "quiz": {"questions": payload.questions},
+            "quiz_badge_name": payload.badge_name,
+            "quiz_badge_description": payload.badge_description,
+        }
+        if payload.publish:
+            update["quiz_published_at"] = datetime.utcnow()
+
+        await db.seasons.update_one({"_id": ObjectId(season_id)}, {"$set": update})
+        return {"message": "Quiz saved", "published": bool(payload.publish)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api_router.get("/seasons/{season_id}/quiz")
+async def get_season_quiz(season_id: str, family_id: Optional[str] = None):
+    """Return the quiz payload + availability information for the given family."""
+    try:
+        season = await db.seasons.find_one({"_id": ObjectId(season_id)})
+        if not season:
+            raise HTTPException(status_code=404, detail="Season not found")
+
+        user = None
+        if family_id:
+            user = await db.users.find_one({"_id": ObjectId(family_id)})
+
+        # Number of episodes this family has completed in that season
+        family_completed_in_season = 0
+        total_episodes_in_season = 0
+        try:
+            season_episode_ids = [
+                str(e["_id"])
+                for e in await db.episodes.find({"season_id": season_id}).to_list(1000)
+            ]
+            total_episodes_in_season = len(season_episode_ids)
+            if user:
+                completed = set(user.get("completed_episodes", []))
+                family_completed_in_season = len(completed & set(season_episode_ids))
+        except Exception:
+            pass
+
+        availability = _quiz_availability(season, user)
+        availability.update({
+            "family_completed_in_season": family_completed_in_season,
+            "total_episodes_in_season": total_episodes_in_season,
+        })
+
+        # Only include quiz content once user has completed enough episodes
+        min_required = max(1, availability["total_expected"] or total_episodes_in_season)
+        can_take = availability["available"] and family_completed_in_season >= min_required
+        availability["can_take"] = can_take
+
+        payload = clean_doc(season)
+        # Sanitize published_at
+        if payload.get("quiz_published_at"):
+            payload["quiz_published_at"] = (
+                payload["quiz_published_at"].isoformat()
+                if isinstance(payload["quiz_published_at"], datetime)
+                else payload["quiz_published_at"]
+            )
+        payload["availability"] = availability
+        return payload
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def _score_quiz(questions: List[dict], answers: List[Any]) -> Dict[str, Any]:
+    """Return per-question correctness + total score."""
+    per_question = []
+    correct_count = 0
+    for i, q in enumerate(questions):
+        a = answers[i] if i < len(answers) else None
+        qtype = q.get("type")
+        correct_val = None
+        is_correct = False
+        try:
+            if qtype == "mcq":
+                correct_val = int(q.get("correct_index", 0))
+                is_correct = int(a) == correct_val
+            elif qtype == "true_false":
+                correct_val = bool(q.get("correct", False))
+                is_correct = bool(a) == correct_val
+            elif qtype == "ranking":
+                items = q.get("items", []) or []
+                # Correct order is the items in the given order (index 0..n-1)
+                correct_val = list(range(len(items)))
+                # user-submitted order (indices)
+                user_order = [int(x) for x in (a or [])]
+                is_correct = user_order == correct_val
+        except Exception:
+            is_correct = False
+
+        if is_correct:
+            correct_count += 1
+
+        per_question.append({
+            "index": i,
+            "type": qtype,
+            "user_answer": a,
+            "correct_answer": correct_val,
+            "is_correct": is_correct,
+        })
+
+    total = len(questions)
+    return {
+        "per_question": per_question,
+        "correct_count": correct_count,
+        "total": total,
+        "ratio": (correct_count / total) if total else 0,
+    }
+
+
+@api_router.post("/seasons/{season_id}/quiz/complete")
+async def complete_season_quiz(season_id: str, payload: SeasonQuizComplete):
+    """Score the quiz and award Mopado$/badge as appropriate. Idempotent per family."""
+    try:
+        season = await db.seasons.find_one({"_id": ObjectId(season_id)})
+        if not season or not (season.get("quiz") or {}).get("questions"):
+            raise HTTPException(status_code=404, detail="Quiz not found")
+
+        user = await db.users.find_one({"_id": ObjectId(payload.family_id)})
+        if not user:
+            raise HTTPException(status_code=404, detail="Family not found")
+
+        # Idempotence — one quiz completion per family per season
+        completed_quizzes = user.get("completed_quizzes") or []
+        if season_id in completed_quizzes:
+            return {
+                "message": "Quiz already completed",
+                "already_taken": True,
+                "mopado_earned": 0,
+                "badge_earned": None,
+            }
+
+        questions = season["quiz"]["questions"]
+        score = _score_quiz(questions, payload.answers)
+
+        mopado_earned = QUIZ_MOPADO_PER_CORRECT * score["correct_count"]
+        badge_earned = None
+        passing = score["ratio"] > QUIZ_PASSING_RATIO
+        if passing and season.get("quiz_badge_name"):
+            badge_earned = season["quiz_badge_name"]
+
+        update_ops = {
+            "$inc": {"mopado_dollars": mopado_earned},
+            "$addToSet": {"completed_quizzes": season_id},
+        }
+        if badge_earned and badge_earned not in (user.get("badges") or []):
+            update_ops["$addToSet"]["badges"] = badge_earned
+
+        await db.users.update_one(
+            {"_id": ObjectId(payload.family_id)},
+            update_ops,
+        )
+
+        return {
+            "message": "Quiz completed",
+            "already_taken": False,
+            "mopado_earned": mopado_earned,
+            "badge_earned": badge_earned,
+            "passing": passing,
+            "score": score,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 # ==================== EPISODE ROUTES ====================
 

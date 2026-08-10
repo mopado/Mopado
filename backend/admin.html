@@ -308,8 +308,53 @@
                         <label>Ordre *</label>
                         <input type="number" id="season-order" value="1" required>
                     </div>
+                    <div class="form-group">
+                        <label>Nombre prévu d'épisodes</label>
+                        <input type="number" id="season-expected-episodes" value="10" min="1">
+                        <p style="color: #7F8C8D; font-size: 12px; margin-top: 4px;">
+                            💡 Sert à indiquer aux familles combien d'épisodes seront disponibles au total pour cette saison.
+                        </p>
+                    </div>
                     <button type="submit" class="btn btn-primary">Créer la saison</button>
                 </form>
+            </div>
+
+            <div class="card">
+                <h2>Quiz de fin de saison</h2>
+                <div id="quiz-alert"></div>
+                <p style="color: #7F8C8D; font-size: 13px; margin-bottom: 12px;">
+                    Sélectionnez une saison, remplissez les questions (MCQ, Vrai/Faux, Classement) puis publiez.
+                    Le quiz reste disponible <strong>7 jours</strong> à partir de sa publication.
+                    Bonus : <strong>2 Mopado$ / bonne réponse</strong> + badge à ≥60% de bonnes réponses.
+                </p>
+                <div class="form-group">
+                    <label>Saison</label>
+                    <select id="quiz-season-select" onchange="loadQuizEditor()">
+                        <option value="">— Sélectionner —</option>
+                    </select>
+                </div>
+                <div id="quiz-editor" style="display:none">
+                    <div class="form-group">
+                        <label>Nom du badge (à ≥60%)</label>
+                        <input type="text" id="quiz-badge-name" placeholder="Ex: Champion saison 1">
+                    </div>
+                    <div class="form-group">
+                        <label>Description du badge</label>
+                        <input type="text" id="quiz-badge-description" placeholder="Vous avez brillé au quiz !">
+                    </div>
+                    <div class="form-group">
+                        <label>Questions</label>
+                        <div id="quiz-questions-list"></div>
+                        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+                            <button type="button" class="btn btn-secondary" onclick="addQuizQuestion('mcq')">+ MCQ</button>
+                            <button type="button" class="btn btn-secondary" onclick="addQuizQuestion('true_false')">+ Vrai/Faux</button>
+                            <button type="button" class="btn btn-secondary" onclick="addQuizQuestion('ranking')">+ Classement</button>
+                        </div>
+                    </div>
+                    <div id="quiz-status" style="margin: 10px 0; color: #7F8C8D; font-size: 13px;"></div>
+                    <button type="button" class="btn btn-primary" onclick="saveQuiz(true)">Publier le quiz (démarre les 7 jours)</button>
+                    <button type="button" class="btn btn-secondary" style="margin-left:8px" onclick="saveQuiz(false)">Enregistrer sans publier</button>
+                </div>
             </div>
 
             <div class="card">
@@ -651,25 +696,61 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             try {
                 const response = await fetch(`${API_URL}/seasons`);
                 const seasons = await response.json();
-                
+
                 const list = document.getElementById('seasons-list');
                 if (seasons.length === 0) {
                     list.innerHTML = '<p style="color: #7F8C8D;">Aucune saison créée</p>';
-                    return;
+                } else {
+                    // Fetch episode counts per season in parallel
+                    const counts = await Promise.all(seasons.map(async (s) => {
+                        try {
+                            const r = await fetch(`${API_URL}/episodes/season/${s.id}`);
+                            const eps = r.ok ? await r.json() : [];
+                            return eps.length;
+                        } catch { return 0; }
+                    }));
+                    list.innerHTML = seasons.map((season, i) => {
+                        const count = counts[i];
+                        const expected = season.expected_episodes || 0;
+                        const publishedAt = season.quiz_published_at
+                            ? new Date(season.quiz_published_at)
+                            : null;
+                        let quizBadge = '';
+                        if ((season.quiz?.questions || []).length) {
+                            if (publishedAt) {
+                                const daysLeft = Math.max(0, 7 - Math.floor((Date.now() - publishedAt.getTime()) / 86400000));
+                                quizBadge = daysLeft > 0
+                                    ? ` • <span style="color:#27AE60">Quiz publié (${daysLeft}j restants)</span>`
+                                    : ' • <span style="color:#7F8C8D">Quiz expiré</span>';
+                            } else {
+                                quizBadge = ' • <span style="color:#F39C12">Quiz en brouillon</span>';
+                            }
+                        }
+                        return `
+                        <div class="list-item">
+                            <div class="list-item-info">
+                                <h3>${escapeHtml(season.name)}</h3>
+                                <p>${escapeHtml(season.description)}</p>
+                                <p style="font-size: 12px; margin-top: 4px;">
+                                    Ordre: ${season.order} •
+                                    ${count} / ${expected} épisode(s)${quizBadge}
+                                </p>
+                            </div>
+                            <div class="list-item-actions">
+                                <button class="btn btn-danger" onclick="deleteSeason('${season.id}')">Supprimer</button>
+                            </div>
+                        </div>`;
+                    }).join('');
                 }
-                
-                list.innerHTML = seasons.map(season => `
-                    <div class="list-item">
-                        <div class="list-item-info">
-                            <h3>${season.name}</h3>
-                            <p>${season.description}</p>
-                            <p style="font-size: 12px; margin-top: 4px;">Ordre: ${season.order}</p>
-                        </div>
-                        <div class="list-item-actions">
-                            <button class="btn btn-danger" onclick="deleteSeason('${season.id}')">Supprimer</button>
-                        </div>
-                    </div>
-                `).join('');
+
+                // Populate quiz-season-select
+                const qs = document.getElementById('quiz-season-select');
+                if (qs) {
+                    const cur = qs.value;
+                    qs.innerHTML = '<option value="">— Sélectionner —</option>' +
+                        seasons.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+                    if (cur && seasons.find(s => s.id === cur)) qs.value = cur;
+                }
             } catch (error) {
                 console.error('Error loading seasons:', error);
             }
@@ -681,7 +762,8 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             const data = {
                 name: document.getElementById('season-name').value,
                 description: document.getElementById('season-description').value,
-                order: parseInt(document.getElementById('season-order').value)
+                order: parseInt(document.getElementById('season-order').value),
+                expected_episodes: parseInt(document.getElementById('season-expected-episodes').value || '10'),
             };
             
             try {
@@ -1174,6 +1256,153 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
         }
         function escapeAttr(str) {
             return String(str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+
+        // ============ SEASON QUIZ EDITOR ============
+        let quizDraft = { questions: [], badge_name: '', badge_description: '', selectedSeasonId: '' };
+
+        async function loadQuizEditor() {
+            const sid = document.getElementById('quiz-season-select').value;
+            quizDraft.selectedSeasonId = sid;
+            const editor = document.getElementById('quiz-editor');
+            const statusEl = document.getElementById('quiz-status');
+            if (!sid) { editor.style.display = 'none'; return; }
+            editor.style.display = 'block';
+
+            try {
+                const r = await fetch(`${API_URL}/seasons/${sid}/quiz`);
+                if (r.ok) {
+                    const data = await r.json();
+                    const q = data.quiz?.questions || [];
+                    quizDraft.questions = q;
+                    quizDraft.badge_name = data.quiz_badge_name || '';
+                    quizDraft.badge_description = data.quiz_badge_description || '';
+                    document.getElementById('quiz-badge-name').value = quizDraft.badge_name;
+                    document.getElementById('quiz-badge-description').value = quizDraft.badge_description;
+
+                    const publishedAt = data.quiz_published_at ? new Date(data.quiz_published_at) : null;
+                    if (publishedAt) {
+                        const daysLeft = Math.max(0, 7 - Math.floor((Date.now() - publishedAt.getTime()) / 86400000));
+                        statusEl.innerHTML = `📅 Publié le ${publishedAt.toLocaleString('fr-FR')} • ${daysLeft} jour(s) restant(s)`;
+                    } else {
+                        statusEl.innerHTML = '📝 Non publié (brouillon)';
+                    }
+                    renderQuizQuestions();
+                }
+            } catch (e) {
+                showAlert('quiz-alert', 'Erreur chargement quiz: ' + e.message, 'error');
+            }
+        }
+
+        function addQuizQuestion(type) {
+            if (type === 'mcq') {
+                quizDraft.questions.push({ type: 'mcq', question: '', answers: ['', '', '', ''], correct_index: 0 });
+            } else if (type === 'true_false') {
+                quizDraft.questions.push({ type: 'true_false', question: '', correct: true });
+            } else if (type === 'ranking') {
+                quizDraft.questions.push({ type: 'ranking', question: '', items: ['', '', '', ''] });
+            }
+            renderQuizQuestions();
+        }
+
+        function removeQuizQuestion(idx) {
+            quizDraft.questions.splice(idx, 1);
+            renderQuizQuestions();
+        }
+
+        function updateQuizQuestion(idx, field, value) {
+            quizDraft.questions[idx][field] = value;
+        }
+
+        function updateMcqAnswer(idx, ansIdx, value) {
+            quizDraft.questions[idx].answers[ansIdx] = value;
+        }
+
+        function updateRankingItem(idx, itemIdx, value) {
+            quizDraft.questions[idx].items[itemIdx] = value;
+        }
+
+        function renderQuizQuestions() {
+            const list = document.getElementById('quiz-questions-list');
+            if (!quizDraft.questions.length) {
+                list.innerHTML = '<p style="color: #7F8C8D; font-size: 13px;">Aucune question pour l\'instant.</p>';
+                return;
+            }
+            list.innerHTML = quizDraft.questions.map((q, i) => {
+                let body = '';
+                if (q.type === 'mcq') {
+                    body = `
+                        ${q.answers.map((a, ai) => `
+                            <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+                                <input type="radio" name="mcq-correct-${i}" ${q.correct_index === ai ? 'checked' : ''} onclick="updateQuizQuestion(${i},'correct_index',${ai})">
+                                <input type="text" value="${escapeAttrVal(a)}" placeholder="Réponse ${ai+1}" oninput="updateMcqAnswer(${i}, ${ai}, this.value)" style="flex:1">
+                            </div>
+                        `).join('')}
+                        <p style="font-size:11px; color:#7F8C8D; margin-top:4px;">Sélectionnez la bonne réponse via le bouton radio.</p>
+                    `;
+                } else if (q.type === 'true_false') {
+                    body = `
+                        <div style="margin-top:8px;">
+                            <label style="margin-right:16px;"><input type="radio" name="tf-${i}" ${q.correct ? 'checked' : ''} onclick="updateQuizQuestion(${i},'correct',true)"> Vrai</label>
+                            <label><input type="radio" name="tf-${i}" ${!q.correct ? 'checked' : ''} onclick="updateQuizQuestion(${i},'correct',false)"> Faux</label>
+                        </div>
+                    `;
+                } else if (q.type === 'ranking') {
+                    body = `
+                        ${q.items.map((it, ii) => `
+                            <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+                                <span style="font-weight:700; min-width:24px;">${ii+1}.</span>
+                                <input type="text" value="${escapeAttrVal(it)}" placeholder="Item ${ii+1}" oninput="updateRankingItem(${i}, ${ii}, this.value)" style="flex:1">
+                            </div>
+                        `).join('')}
+                        <p style="font-size:11px; color:#7F8C8D; margin-top:4px;">L'ordre saisi est le classement correct. Les familles verront les items dans un ordre aléatoire.</p>
+                    `;
+                }
+                const typeLabel = { mcq: 'MCQ', true_false: 'Vrai/Faux', ranking: 'Classement' }[q.type] || q.type;
+                return `
+                    <div style="background:#F5F5F5; padding:12px; border-radius:8px; margin-bottom:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <strong>Q${i+1} • ${typeLabel}</strong>
+                            <button type="button" class="btn btn-danger" style="padding:4px 8px; font-size:12px" onclick="removeQuizQuestion(${i})">×</button>
+                        </div>
+                        <input type="text" value="${escapeAttrVal(q.question)}" placeholder="Énoncé de la question" oninput="updateQuizQuestion(${i}, 'question', this.value)" style="width:100%">
+                        ${body}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function escapeAttrVal(v) {
+            return String(v || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        async function saveQuiz(publish) {
+            const sid = quizDraft.selectedSeasonId;
+            if (!sid) return;
+            quizDraft.badge_name = document.getElementById('quiz-badge-name').value;
+            quizDraft.badge_description = document.getElementById('quiz-badge-description').value;
+            try {
+                const r = await fetch(`${API_URL}/seasons/${sid}/quiz`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        questions: quizDraft.questions,
+                        badge_name: quizDraft.badge_name || null,
+                        badge_description: quizDraft.badge_description || null,
+                        publish,
+                    }),
+                });
+                if (r.ok) {
+                    showAlert('quiz-alert', publish ? '✅ Quiz publié ! (disponible 7 jours)' : '💾 Quiz enregistré (brouillon)', 'success');
+                    loadQuizEditor();
+                    loadSeasons();
+                } else {
+                    const err = await r.json().catch(() => ({}));
+                    showAlert('quiz-alert', 'Erreur: ' + (err.detail || 'Sauvegarde impossible'), 'error');
+                }
+            } catch (e) {
+                showAlert('quiz-alert', 'Erreur: ' + e.message, 'error');
+            }
         }
 
         // Initial load

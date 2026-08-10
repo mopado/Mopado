@@ -1,0 +1,43 @@
+{
+  "summary": "Phase 3 Season Quiz feature — backend 9/9 pytest cases in test_season_quiz.py PASS (all availability + scoring + upsert paths), and the full mobile UI flow was validated end-to-end against qzu-e17099@t.fr on the live preview URL. Home shows the orange 'Quiz de fin de saison' card (testID quiz-available-card) → intro screen (testID quiz-start) correctly renders '3 questions', '+2 Mopado$ par bonne réponse', 'Badge « Champion saison test » à ≥ 60% de réussite', 'Disponible 7 jour(s)' → Q1 MCQ '2+2 ?' tapping '4' shows green highlight + 'Bonne réponse !' feedback → Q2 T/F 'Le ciel est bleu ?' tapping 'Vrai' shows green feedback → Q3 ranking widget renders shuffled items with 'Touchez les items dans le bon ordre' hint and lets user pick items (chosen list shows '1. …', '2. …' running order) → Valider mes réponses → result screen shows 🏆 'Bravo à toute la famille !', score, +Mopado$, 'Badge : Champion saison test', 'Retour à l'accueil'. DB verified: qzu mopado_dollars +4 (20→24), badges got 'Champion saison test', completed_quizzes contains the season id. Idempotence verified: revisiting /quiz/{seasonId} shows 'Quiz déjà effectué / Vous avez déjà répondu à ce quiz'. Admin panel verified: 'Nombre prévu d'épisodes' field present in the season form, Saison test list item shows '4 / 2 épisode(s) • Quiz publié (7j restants)', quiz selector loads 'Saison test'. Backend PUT save-without-publish preserves quiz_published_at, publish=true refreshes it (both covered by pytest).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/seasons/{id}/quiz/complete", "issue": "Even a 0/3 result adds the season id to user.completed_quizzes, so a family that fails cannot retry. Backend test asserts this is the actual behavior (idempotence per season, not per-passing). If the intent was 'only lock in on pass', consider gating $addToSet completed_quizzes on passing==true. Non-blocking — matches the review-request spec that says the endpoint is 'idempotent per family'."},
+      {"endpoint": "POST /api/seasons/{id}/quiz/complete", "issue": "Passing threshold uses strict > 0.6 (server.py:608). At exactly 60% (e.g., 3/5) the badge would NOT be awarded. With 3 questions this is invisible (2/3=0.667 passes, 1/3=0.333 fails), but for a 5-question quiz the wording 'à ≥ 60%' shown to users on the intro screen doesn't match the strict > check. Consider `>=`."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_season_quiz.py",
+    "/app/test_reports/pytest/pytest_season_quiz.xml"
+  ],
+  "action_items": [
+    "(Non-blocking, product decision) Decide whether a failing completion should also lock the quiz (current behaviour) or allow retries until pass. Update server.py:614 accordingly.",
+    "(Non-blocking) Align server passing check with the UI wording — either display 'à > 60% de réussite' on the intro card OR change `passing = ratio > QUIZ_PASSING_RATIO` to `>=` in server.py:608.",
+    "(Nice-to-have) Add testIDs on the quiz option buttons (mcq answer, tf-vrai/tf-faux, ranking-pool-item[i], ranking-chosen-item[i]) and on 'Valider mes réponses' / 'Retour à l'accueil'. Playwright had to fall back to text-coordinate tapping since the current TouchableOpacity nodes do not expose role=button on RN Web."
+  ],
+  "critical_code_review_comments": [
+    "server.py:436 within_window = elapsed < 7 uses `days` (integer floor), which is correct here; days_remaining = max(0, 7 - elapsed) can go to 0 while within_window is still true on the 7th day — matches the request semantic 'Disponible 7 jour(s)'.",
+    "server.py:515 min_required = max(1, expected or total_episodes) — if expected_episodes is 0 (unset) the code falls back to the actual episode count in the season, which is a sensible default.",
+    "quiz/[seasonId].tsx:302 isCorrectPreview is a client-side preview only; final scoring is authoritative on the server. Good.",
+    "quiz/[seasonId].tsx:99 shuffledForRanking depends on `questions` (a fresh object each render). React `useMemo` will re-shuffle on every re-render because the identity of `questions` changes. In practice this doesn't cause visual re-shuffle because the current-answer/showFeedback state changes don't rebuild the array's identity between renders, but is fragile — consider memoizing off `quiz?.quiz?.questions?.length` or the quiz id."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_season_quiz.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 pytest cases pass in test_season_quiz.py)",
+    "frontend": "100% for the required flow — Home card, intro, MCQ correct + feedback, T/F correct + feedback, Ranking pick+validate, result screen (badge+mopado+score), DB persistence, idempotence 'Quiz déjà effectué'. Admin panel checkpoints verified."
+  },
+  "seed_data_creation": "Created 4 TEST_ family accounts for backend scoring tests (all-correct, all-wrong, partial 2/3, and 1/3). All were deleted after their tests. The qzu-e17099@t.fr seed account was USED by the frontend flow so it now has completed_quizzes=[season_id], +4 Mopado$ (24 total), and the 'Champion saison test' badge. If the main agent needs to re-run the full frontend flow, register a fresh account, mark 2 season episodes as completed on it, or `db.users.update_one({email:'qzu-e17099@t.fr'}, {'$set':{completed_quizzes:[], badges:[b for b in badges if b!='Champion saison test'], mopado_dollars:20}})` to reset.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Season Quiz is fully working end-to-end. Season 'Saison test' id: 6a78e7a45f87998d7ed8e2c3 with quiz_published_at now ≈ 2026-08-10. quiz has 3 questions (MCQ '2+2?' correct index 1, T/F 'Le ciel est bleu ?' correct=true, Ranking 'Range du plus petit au plus grand' items ['1','2','3','4']). Note: the qzu seed account has NOW taken the quiz — reset it before re-running the frontend flow. For Playwright/RN Web: MCQ/T/F/Ranking option buttons do NOT expose role=button, so text-based selectors need to click parent TouchableOpacity by computing bounding rect via range.getBoundingClientRect() on the innermost text node (see this run for a working recipe). Consider adding explicit testIDs to unblock future tests. The server uses strict > 0.6 for passing (server.py:608) — at exactly 60% the badge is not awarded (edge case for future 5-question quizzes).",
+  "rca_of_issue": "N/A — new feature verification; no bugs found. Two non-blocking product/edge-case notes captured under backend_issues.minor."
+}

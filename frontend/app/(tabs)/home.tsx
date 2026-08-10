@@ -41,6 +41,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [planning, setPlanning] = useState<Planning | null>(null);
   const [showPlanningEditor, setShowPlanningEditor] = useState(false);
+  const [availableQuiz, setAvailableQuiz] = useState<{ id: string; name: string; days_remaining: number } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -79,6 +80,26 @@ export default function HomeScreen() {
       if (seasonsResponse.ok) {
         seasonsData = await seasonsResponse.json();
         setSeasons(seasonsData);
+      }
+
+      // Check if any season has an available quiz for this family
+      if (user?.id && seasonsData.length > 0) {
+        let foundQuiz: { id: string; name: string; days_remaining: number } | null = null;
+        for (const season of seasonsData) {
+          try {
+            const qr = await fetch(
+              `${BACKEND_URL}/api/seasons/${season.id}/quiz?family_id=${user.id}`,
+            );
+            if (qr.ok) {
+              const qd = await qr.json();
+              if (qd.availability?.can_take) {
+                foundQuiz = { id: season.id, name: season.name, days_remaining: qd.availability.days_remaining };
+                break;
+              }
+            }
+          } catch {}
+        }
+        setAvailableQuiz(foundQuiz);
       }
 
       // Fetch the latest created/updated episode across the whole library
@@ -228,6 +249,29 @@ export default function HomeScreen() {
               </Text>
             </View>
           </View>
+        ) : null}
+
+        {/* Season quiz available card */}
+        {availableQuiz ? (
+          <TouchableOpacity
+            style={styles.quizCard}
+            onPress={() => router.push(`/quiz/${availableQuiz.id}`)}
+            testID="quiz-available-card"
+          >
+            <View style={styles.quizIconWrap}>
+              <Ionicons name="school" size={26} color={colors.textWhite} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.quizTitle}>Quiz de fin de saison</Text>
+              <Text style={styles.quizSub}>
+                {availableQuiz.name} • Disponible {availableQuiz.days_remaining} jour(s)
+              </Text>
+              <Text style={styles.quizHint}>
+                +2 Mopado$ par bonne réponse • Badge à plus de 60% de réussite
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={22} color={colors.textWhite} />
+          </TouchableOpacity>
         ) : null}
 
         {/* Planning card (next Mopado session) */}
@@ -618,4 +662,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
   },
+  quizCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.primary,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 16,
+  },
+  quizIconWrap: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    padding: 10,
+    borderRadius: 12,
+  },
+  quizTitle: { color: colors.textWhite, fontWeight: '700', fontSize: 16 },
+  quizSub: { color: colors.textWhite, fontSize: 13, marginTop: 2, opacity: 0.95 },
+  quizHint: { color: colors.textWhite, fontSize: 11, marginTop: 4, opacity: 0.85 },
 });
