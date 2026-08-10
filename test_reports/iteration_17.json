@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 17 — Planning feature verified end-to-end. Backend: 9/9 pytest cases in test_planning.py PASS (POST upsert w/ no dup, GET returns doc or null, DELETE idempotent, all 8 time_slot values round-trip, session-completion cascade delete on FRESH completion, replay-completion does NOT wipe planning, famille.test seeded planning is retrievable). Frontend Home widget: verified with famille.test@mopado.fr — 'Prochain Mopado planifié / Mercredi Soir' card is visible (planning-card testID), Modifier button opens modal, day 4 (Vendredi) + slot 'aperitif' selection + Enregistrer updates the card to 'Vendredi Apéro' (backend GET confirms day_of_week=4/time_slot=aperitif), then X close correctly dismisses the modal. Session flow: registered planwalk-82635651@mopado.fr, fully walked La musique episode (video → 2 cards → agree_or_not game 6/6 → closing word 'merveilleux' → celebration_mopado +5 → celebration_badge 'Monte le son' → bonus_mission → PLANNING STEP). Verified the planning step: title 'Prochain moment Mopado' present, 7 day pills (planning-day-0..6) + 8 slot chips (planning-slot-*) + planning-save-button + 'Plus tard' link all render. Path B (skip): 'Plus tard' → advances to closing_message ('À bientôt !' + closing-message-finish testID). Path A (save): registered plansave-e9656bc6@mopado.fr, walked same episode, saved Jeudi/diner in the planning step → advanced to closing_message; backend GET /api/planning/{fid} confirms {day_of_week:3, time_slot:'diner'} was persisted AFTER the completion (so the picker inside the session, which runs POST after the cascade delete, correctly leaves a fresh planning for the family). Restored famille.test planning to Mercredi Soir at the end of testing.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_planning.py",
+    "/app/test_reports/pytest/pytest_planning.xml"
+  ],
+  "action_items": [
+    "(Optional / non-blocking) Home modal 'X' close icon has no testID. Consider adding testID=\"close-planning-modal\" on the TouchableOpacity at /app/frontend/app/(tabs)/home.tsx:319 to simplify future tests. (Not a bug — worked via DOM traversal.)",
+    "(Optional / non-blocking) PlanningStep in session/[episodeId].tsx wraps a 'Plus tard' TouchableOpacity without a testID (line ~1212). Suggest testID=\"planning-skip-link\" for robustness."
+  ],
+  "critical_code_review_comments": [
+    "server.py:619 correctly places the plannings.delete_one BEFORE the return of the fresh-completion branch — the already-completed branch (line ~589) does NOT delete, which is verified by test_replay_completion_still_leaves_planning_absent. This is the correct semantic: only fresh completions consume the planning.",
+    "server.py:663-705 planning endpoints use plain family_id (no auth check). Consistent with the rest of the app which does the same for family-scoped resources — flag only if the security model tightens later. Not blocking.",
+    "PlanningPicker.tsx:47 describePlanning() returns lowercase slot label ('vendredi apéro'), but home CSS/style capitalizes it ('Vendredi Apéro') as observed — visually correct. In the session PlanningStep no describe() is shown so no issue.",
+    "PlanningCreate model (server.py:178) does NOT validate time_slot against the enum documented in the review request; POST with an arbitrary string would succeed. All 8 documented slot values round-trip fine (verified) — enforce validation only if you want to lock the value space. Not a bug."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_planning.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 pytest cases pass)",
+    "frontend": "100% (Home widget + session-step planning + both Path A save & Path B skip all verified on 390x844)"
+  },
+  "seed_data_creation": "Created 3 test accounts during this run: planningtest-ffa12e7b@mopado.fr (used for initial walkthrough — ended in a bad closing-word state, harmless), planwalk-82635651@mopado.fr (completed La musique via Path B skip — has +5 Mopado$, 'Monte le son' badge, 1 completed episode, no planning), plansave-e9656bc6@mopado.fr (completed La musique via Path A save — same rewards + planning Jeudi/diner persisted). famille.test@mopado.fr planning was restored to Mercredi Soir (day_of_week=2, time_slot='soir') at the end of the run to keep the review-request seed intact.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Planning feature is fully working. For future runs: famille.test@mopado.fr has planning Mercredi Soir (day 2, soir). To re-test the in-session PlanningStep quickly, register a fresh account and use these tap sequences on episode La musique (agree_or_not, 6 affirmations): Continuer → Suivant → Suivant → Démarrer → Suivant×5 → Nous avons terminé → fill closing word → click testID close-session-button → celebration-mopado-next → celebration-badge-next → bonus-mission-understood → planning step. From here either click 'Plus tard' (skip) or select any day+slot then testID planning-save-button. Both lead to the closing-message step (testID closing-message-finish). The current episode id is 6a79eaf0a29722368ca40390 (La musique) under season 6a78e7a45f87998d7ed8e2c3. The two minor testID nits above are optional polish only — main agent can pick them up in a follow-up.",
+  "rca_of_issue": "N/A — confirmation run of a new feature; no bugs found."
+}

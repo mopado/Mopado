@@ -18,7 +18,8 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.mopadofamily.in0g8l"
+      "package": "com.emergent.mopadofamily.in0g8l",
+      "permissions": ["SCHEDULE_EXACT_ALARM"]
     },
     "web": {
       "bundler": "metro",
@@ -36,7 +37,14 @@
           "backgroundColor": "#000000"
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "expo-notifications",
+        {
+          "color": "#FF8C42",
+          "defaultChannel": "mopado-reminders"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

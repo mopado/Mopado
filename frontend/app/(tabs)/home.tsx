@@ -13,6 +13,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { colors } from '@/src/theme/colors';
+import PlanningPicker, { describePlanning, Planning } from '@/src/components/PlanningPicker';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -38,6 +39,8 @@ export default function HomeScreen() {
   const [currentSeasonId, setCurrentSeasonId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [planning, setPlanning] = useState<Planning | null>(null);
+  const [showPlanningEditor, setShowPlanningEditor] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -61,6 +64,14 @@ export default function HomeScreen() {
         .catch(() => null);
 
       const completedEpisodes: string[] = freshUserData?.completed_episodes || user?.completed_episodes || [];
+
+      // Load family planning in parallel with the rest
+      if (user?.id) {
+        fetch(`${BACKEND_URL}/api/planning/${user.id}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(p => setPlanning(p))
+          .catch(() => setPlanning(null));
+      }
 
       // Load seasons (still needed for the "Saison en cours" card)
       const seasonsResponse = await fetch(`${BACKEND_URL}/api/seasons`);
@@ -219,6 +230,52 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
+        {/* Planning card (next Mopado session) */}
+        {(planning || !currentEpisode) && (
+          <View style={styles.planningCard} testID="planning-card">
+            <View style={styles.planningCardHeader}>
+              <Ionicons name="calendar" size={22} color={colors.primary} />
+              <Text style={styles.planningCardTitle}>
+                {planning ? 'Prochain Mopado planifié' : 'Prochain Mopado'}
+              </Text>
+            </View>
+            {planning ? (
+              <>
+                <Text style={styles.planningCardValue}>
+                  {describePlanning(planning)}
+                </Text>
+                {!currentEpisode ? (
+                  <Text style={styles.planningCardHint}>
+                    L{'\''}épisode arrive bientôt — on vous préviendra le jour J
+                  </Text>
+                ) : (
+                  <Text style={styles.planningCardHint}>
+                    Vous pouvez aussi commencer maintenant, quand vous voulez
+                  </Text>
+                )}
+              </>
+            ) : (
+              <Text style={styles.planningCardEmpty}>
+                Le prochain épisode arrive bientôt. Planifiez votre moment ensemble.
+              </Text>
+            )}
+            <TouchableOpacity
+              style={styles.planningCardButton}
+              onPress={() => setShowPlanningEditor(true)}
+              testID="edit-planning-button"
+            >
+              <Ionicons
+                name={planning ? 'create-outline' : 'add-circle-outline'}
+                size={16}
+                color={colors.primary}
+              />
+              <Text style={styles.planningCardButtonText}>
+                {planning ? 'Modifier' : 'Planifier'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Progress Summary */}
         <View style={styles.progressSection}>
           <Text style={styles.sectionTitle}>Votre progression</Text>
@@ -251,6 +308,31 @@ export default function HomeScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Planning editor modal */}
+      {showPlanningEditor && user?.id ? (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Prochain Mopado</Text>
+                <TouchableOpacity onPress={() => setShowPlanningEditor(false)}>
+                  <Ionicons name="close" size={28} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+              <PlanningPicker
+                familyId={user.id}
+                initial={planning}
+                onSaved={(p) => {
+                  setPlanning(p);
+                  setShowPlanningEditor(false);
+                }}
+                onCancel={() => setShowPlanningEditor(false)}
+              />
+            </ScrollView>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -452,5 +534,88 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 20,
     fontStyle: 'italic',
+  },
+  planningCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: colors.backgroundTertiary,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+  },
+  planningCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  planningCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  planningCardValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+    textTransform: 'capitalize',
+  },
+  planningCardEmpty: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  planningCardHint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  planningCardButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    marginTop: 4,
+  },
+  planningCardButtonText: {
+    color: colors.primary,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: colors.overlay,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '85%',
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
   },
 });

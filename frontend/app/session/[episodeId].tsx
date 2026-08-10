@@ -18,6 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { colors } from '@/src/theme/colors';
+import PlanningPicker, { describePlanning } from '@/src/components/PlanningPicker';
+import { cancelPlanningNotifs } from '@/src/utils/notifications';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 const { width } = Dimensions.get('window');
@@ -62,6 +64,7 @@ type SessionStep =
   | 'celebration_mopado'
   | 'celebration_badge'
   | 'bonus_mission'
+  | 'planning'
   | 'closing_message';
 
 export default function SessionScreen() {
@@ -235,6 +238,11 @@ export default function SessionScreen() {
         setClosingMessage(data.closing_message || 'Rendez-vous la semaine prochaine pour un nouveau moment qui compte, ensemble !');
         setBadgesEarned(data.badges_earned || []);
         await refreshUser();
+        // Backend deleted the planning after this fresh completion — cancel
+        // the local notifs so we don't ring for an episode already done.
+        if (!data.already_completed) {
+          cancelPlanningNotifs().catch(() => {});
+        }
         setCurrentStep('celebration_mopado');
       } else {
         setClosingError('Impossible de terminer la session');
@@ -249,14 +257,14 @@ export default function SessionScreen() {
     }
   };
 
-  // Handles progression through the celebration → badge → bonus → closing chain
+  // Handles progression through the celebration → badge → bonus → planning → closing chain
   const handleAfterMopado = () => {
     if (badgesEarned && badgesEarned.length > 0) {
       setCurrentStep('celebration_badge');
     } else if (bonusMission) {
       setCurrentStep('bonus_mission');
     } else {
-      setCurrentStep('closing_message');
+      setCurrentStep('planning');
     }
   };
 
@@ -264,11 +272,15 @@ export default function SessionScreen() {
     if (bonusMission) {
       setCurrentStep('bonus_mission');
     } else {
-      setCurrentStep('closing_message');
+      setCurrentStep('planning');
     }
   };
 
   const handleAfterBonusMission = () => {
+    setCurrentStep('planning');
+  };
+
+  const handleAfterPlanning = () => {
     setCurrentStep('closing_message');
   };
 
@@ -387,6 +399,11 @@ export default function SessionScreen() {
           mission={bonusMission}
           onFinish={handleAfterBonusMission}
         />
+      )}
+
+      {/* Celebration Step 3.5: Planning next session */}
+      {currentStep === 'planning' && user?.id && (
+        <PlanningStep familyId={user.id} onDone={handleAfterPlanning} />
       )}
 
       {/* Celebration Step 4: Closing message */}
@@ -1176,6 +1193,36 @@ function BadgeCelebrationStep({
   );
 }
 
+// Celebration Step 3.5: Plan next session
+function PlanningStep({
+  familyId,
+  onDone,
+}: {
+  familyId: string;
+  onDone: () => void;
+}) {
+  return (
+    <View style={styles.stepContainer}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 }]}>
+        <View style={styles.planningHeader}>
+          <Ionicons name="calendar" size={64} color={colors.primary} />
+          <Text style={styles.planningTitle}>Prochain moment Mopado</Text>
+          <Text style={styles.planningSubtitle}>
+            Quand aimeriez-vous vous retrouver la semaine prochaine ?
+          </Text>
+        </View>
+        <PlanningPicker
+          familyId={familyId}
+          onSaved={() => onDone()}
+        />
+        <TouchableOpacity onPress={onDone} style={styles.planningSkip}>
+          <Text style={styles.planningSkipText}>Plus tard</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
+  );
+}
+
 // Celebration Step 4: Closing message
 function ClosingMessageStep({
   message,
@@ -1553,6 +1600,34 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     fontStyle: 'italic',
     fontWeight: '500',
+  },
+  planningHeader: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  planningTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  planningSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  planningSkip: {
+    alignItems: 'center',
+    padding: 12,
+    marginTop: 8,
+  },
+  planningSkipText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
   bonusMissionTitle: {
     fontSize: 26,

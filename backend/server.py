@@ -174,6 +174,13 @@ class BadgeCreate(BaseModel):
     image_base64: Optional[str] = None
     criteria: str
 
+# Planning Models
+class PlanningCreate(BaseModel):
+    family_id: str
+    day_of_week: int  # 0=Monday, 6=Sunday
+    time_slot: str    # matin, midi, apres_midi, gouter, aperitif, soir, petit_dejeuner, dejeuner, diner
+    note: Optional[str] = None
+
 # ==================== AUTH FUNCTIONS ====================
 
 def verify_password(plain_password, hashed_password):
@@ -607,6 +614,10 @@ async def complete_session(session_id: str, data: SessionComplete):
             update_ops
         )
 
+        # Clear the family's active planning (it was for THIS episode; the
+        # family will plan the next one during the closing flow).
+        await db.plannings.delete_one({"family_id": family_id})
+
         return {
             "message": "Session completed",
             "mopado_earned": mopado_reward,
@@ -646,6 +657,53 @@ async def delete_badge(badge_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== PROGRESS ROUTES ====================
+
+# ==================== PLANNING ROUTES ====================
+
+@api_router.post("/planning")
+async def upsert_planning(payload: PlanningCreate):
+    """Create or update a family's current planning for their next Mopado session.
+    One planning per family (replaces the previous one).
+    """
+    try:
+        planning_doc = {
+            "family_id": payload.family_id,
+            "day_of_week": payload.day_of_week,
+            "time_slot": payload.time_slot,
+            "note": payload.note or None,
+            "updated_at": datetime.utcnow(),
+        }
+        await db.plannings.update_one(
+            {"family_id": payload.family_id},
+            {"$set": planning_doc},
+            upsert=True,
+        )
+        return {"message": "Planning saved", "planning": {**planning_doc, "updated_at": planning_doc["updated_at"].isoformat()}}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api_router.get("/planning/{family_id}")
+async def get_planning(family_id: str):
+    """Return the family's active planning (or null if none)."""
+    doc = await db.plannings.find_one({"family_id": family_id})
+    if not doc:
+        return None
+    return {
+        "family_id": doc["family_id"],
+        "day_of_week": doc.get("day_of_week"),
+        "time_slot": doc.get("time_slot"),
+        "note": doc.get("note"),
+        "updated_at": doc.get("updated_at").isoformat() if doc.get("updated_at") else None,
+    }
+
+
+@api_router.delete("/planning/{family_id}")
+async def delete_planning(family_id: str):
+    """Delete the family's current planning (used after they complete the planned episode)."""
+    await db.plannings.delete_one({"family_id": family_id})
+    return {"message": "Planning removed"}
+
 
 @api_router.get("/progress/{family_id}")
 async def get_family_progress(family_id: str):
