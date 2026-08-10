@@ -53,7 +53,16 @@ interface Episode {
   badge_description?: string;
 }
 
-type SessionStep = 'video' | 'cards' | 'game' | 'cards_after' | 'closing' | 'celebration' | 'bonus_mission';
+type SessionStep =
+  | 'video'
+  | 'cards'
+  | 'game'
+  | 'cards_after'
+  | 'closing'
+  | 'celebration_mopado'
+  | 'celebration_badge'
+  | 'bonus_mission'
+  | 'closing_message';
 
 export default function SessionScreen() {
   const { episodeId, seasonId } = useLocalSearchParams();
@@ -194,7 +203,7 @@ export default function SessionScreen() {
         setClosingMessage(data.closing_message || 'Rendez-vous la semaine prochaine pour un nouveau moment qui compte, ensemble !');
         setBadgesEarned(data.badges_earned || []);
         await refreshUser();
-        setCurrentStep('celebration');
+        setCurrentStep('celebration_mopado');
       } else {
         setClosingError('Impossible de terminer la session');
       }
@@ -205,13 +214,28 @@ export default function SessionScreen() {
       setIsCompleting(false);
     }
   };
-  
-  const handleNextAfterCelebration = () => {
+
+  // Handles progression through the celebration → badge → bonus → closing chain
+  const handleAfterMopado = () => {
+    if (badgesEarned && badgesEarned.length > 0) {
+      setCurrentStep('celebration_badge');
+    } else if (bonusMission) {
+      setCurrentStep('bonus_mission');
+    } else {
+      setCurrentStep('closing_message');
+    }
+  };
+
+  const handleAfterBadge = () => {
     if (bonusMission) {
       setCurrentStep('bonus_mission');
     } else {
-      handleExit();
+      setCurrentStep('closing_message');
     }
+  };
+
+  const handleAfterBonusMission = () => {
+    setCurrentStep('closing_message');
   };
 
   const handleExit = () => {
@@ -301,23 +325,39 @@ export default function SessionScreen() {
         />
       )}
 
-      {/* Celebration Step */}
-      {currentStep === 'celebration' && (
-        <CelebrationStepContent
+      {/* Celebration Step 1: Mopado$ */}
+      {currentStep === 'celebration_mopado' && (
+        <MopadoCelebrationStep
           mopadoEarned={mopadoEarned}
           alreadyCompleted={alreadyCompleted}
           rewardMessage={rewardMessage}
-          closingMessage={closingMessage}
-          badgesEarned={badgesEarned}
+          hasBadge={badgesEarned && badgesEarned.length > 0}
           hasBonusMission={!!bonusMission}
-          onFinish={handleNextAfterCelebration}
+          onNext={handleAfterMopado}
         />
       )}
-      
-      {/* Bonus Mission Step */}
+
+      {/* Celebration Step 2: Badge (only if badge earned) */}
+      {currentStep === 'celebration_badge' && badgesEarned.length > 0 && (
+        <BadgeCelebrationStep
+          badges={badgesEarned}
+          hasBonusMission={!!bonusMission}
+          onNext={handleAfterBadge}
+        />
+      )}
+
+      {/* Celebration Step 3: Bonus Mission (only if bonus mission set) */}
       {currentStep === 'bonus_mission' && bonusMission && (
         <BonusMissionStepContent
           mission={bonusMission}
+          onFinish={handleAfterBonusMission}
+        />
+      )}
+
+      {/* Celebration Step 4: Closing message */}
+      {currentStep === 'closing_message' && (
+        <ClosingMessageStep
+          message={closingMessage}
           onFinish={handleExit}
         />
       )}
@@ -399,12 +439,6 @@ function CardsStepContent({
   return (
     <View style={styles.stepContainer}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.progressIndicator}>
-          <Text style={styles.progressText}>
-            {isAfterGame ? 'Bonus • ' : ''}Carte {currentIndex + 1} sur {totalCards}
-          </Text>
-        </View>
-
         <View style={styles.cardContainer}>
           {card.title ? (
             <View style={styles.cardTitleContainer}>
@@ -822,29 +856,27 @@ function ClosingStepContent({
   );
 }
 
-// Celebration Step Component
-function CelebrationStepContent({
+// Celebration Step 1: Mopado$ earned
+function MopadoCelebrationStep({
   mopadoEarned,
   alreadyCompleted,
   rewardMessage,
-  closingMessage,
-  badgesEarned,
+  hasBadge,
   hasBonusMission,
-  onFinish,
+  onNext,
 }: {
   mopadoEarned: number;
   alreadyCompleted: boolean;
   rewardMessage: string;
-  closingMessage: string;
-  badgesEarned: string[];
+  hasBadge: boolean;
   hasBonusMission: boolean;
-  onFinish: () => void;
+  onNext: () => void;
 }) {
   return (
     <View style={styles.stepContainer}>
       <ScrollView contentContainerStyle={[styles.scrollContent, styles.celebrationContent]}>
         <Ionicons name="trophy" size={100} color={colors.gold} />
-        
+
         <Text style={styles.celebrationTitle}>Bravo !</Text>
         <Text style={styles.celebrationSubtitle}>
           Vous avez terminé votre moment Mopado
@@ -869,31 +901,73 @@ function CelebrationStepContent({
             ) : null}
           </View>
         )}
-        
-        {/* Badges earned */}
-        {badgesEarned && badgesEarned.length > 0 && (
-          <View style={styles.badgeEarnedCard}>
-            <Ionicons name="medal" size={40} color={colors.gold} />
-            <Text style={styles.badgeEarnedTitle}>Nouveau badge !</Text>
-            {badgesEarned.map((badge, i) => (
-              <Text key={i} style={styles.badgeEarnedName}>{badge}</Text>
-            ))}
-          </View>
-        )}
+      </ScrollView>
 
-        <View style={styles.celebrationMessage}>
-          <Ionicons name="heart" size={32} color={colors.accent} />
-          <Text style={styles.celebrationText}>
-            {closingMessage}
-          </Text>
+      <TouchableOpacity style={styles.continueButton} onPress={onNext} testID="celebration-mopado-next">
+        <Text style={styles.continueButtonText}>Suivant</Text>
+        <Ionicons name="arrow-forward" size={20} color={colors.textWhite} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// Celebration Step 2: Badge earned
+function BadgeCelebrationStep({
+  badges,
+  hasBonusMission,
+  onNext,
+}: {
+  badges: string[];
+  hasBonusMission: boolean;
+  onNext: () => void;
+}) {
+  return (
+    <View style={styles.stepContainer}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, styles.celebrationContent]}>
+        <Ionicons name="medal" size={100} color={colors.gold} />
+        <Text style={styles.celebrationTitle}>Nouveau badge !</Text>
+        <Text style={styles.celebrationSubtitle}>
+          Vous venez de débloquer :
+        </Text>
+        <View style={styles.badgeEarnedCard}>
+          <Ionicons name="ribbon" size={48} color={colors.gold} />
+          {badges.map((badge, i) => (
+            <Text key={i} style={styles.badgeBigName}>{badge}</Text>
+          ))}
         </View>
       </ScrollView>
 
-      <TouchableOpacity style={styles.continueButton} onPress={onFinish}>
+      <TouchableOpacity style={styles.continueButton} onPress={onNext} testID="celebration-badge-next">
         <Text style={styles.continueButtonText}>
-          {hasBonusMission ? 'Voir la mission bonus' : "Retour à l'accueil"}
+          {hasBonusMission ? 'Voir la mission bonus' : 'Suivant'}
         </Text>
-        <Ionicons name={hasBonusMission ? 'gift' : 'home'} size={20} color={colors.textWhite} />
+        <Ionicons name={hasBonusMission ? 'gift' : 'arrow-forward'} size={20} color={colors.textWhite} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// Celebration Step 4: Closing message
+function ClosingMessageStep({
+  message,
+  onFinish,
+}: {
+  message: string;
+  onFinish: () => void;
+}) {
+  return (
+    <View style={styles.stepContainer}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, styles.celebrationContent]}>
+        <Ionicons name="heart-circle" size={100} color={colors.primary} />
+        <Text style={styles.celebrationTitle}>À bientôt !</Text>
+        <View style={styles.closingMessageCard}>
+          <Text style={styles.closingMessageText}>{message}</Text>
+        </View>
+      </ScrollView>
+
+      <TouchableOpacity style={styles.continueButton} onPress={onFinish} testID="closing-message-finish">
+        <Text style={styles.continueButtonText}>Retour à l'accueil</Text>
+        <Ionicons name="home" size={20} color={colors.textWhite} />
       </TouchableOpacity>
     </View>
   );
@@ -917,9 +991,9 @@ function BonusMissionStepContent({
           <Text style={styles.bonusMissionText}>{mission}</Text>
         </View>
       </ScrollView>
-      <TouchableOpacity style={styles.continueButton} onPress={onFinish}>
-        <Text style={styles.continueButtonText}>Retour à l'accueil</Text>
-        <Ionicons name="home" size={20} color={colors.textWhite} />
+      <TouchableOpacity style={styles.continueButton} onPress={onFinish} testID="bonus-mission-understood">
+        <Text style={styles.continueButtonText}>J'ai compris</Text>
+        <Ionicons name="checkmark-circle" size={20} color={colors.textWhite} />
       </TouchableOpacity>
     </View>
   );
@@ -1225,6 +1299,31 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '600',
     marginTop: 4,
+  },
+  badgeBigName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.gold,
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  closingMessageCard: {
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    padding: 28,
+    marginTop: 24,
+    borderWidth: 2,
+    borderColor: colors.primaryLight,
+    width: '100%',
+    alignItems: 'center',
+  },
+  closingMessageText: {
+    fontSize: 20,
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 30,
+    fontStyle: 'italic',
+    fontWeight: '500',
   },
   bonusMissionTitle: {
     fontSize: 26,

@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 12 (register-bug fix + latest-episode + celebration split + admin edit + cleanup on edit/delete): all 5 features verified. Backend: 9/9 pytest tests pass (test_iteration_12.py) covering register (success/duplicate/invalid email), episode created_at/updated_at timestamps, PUT bumps updated_at while preserving created_at, GET /api/episodes/latest/current returns most-recent by updated_at (verified by inserting 2 eps + bumping older via PUT), PUT and DELETE both fully clean up user rewards (mopado_dollars decremented by mopado_reward, badge_name pulled from users.badges, episode id pulled from completed_episodes, sessions.delete_many). Frontend (mobile 390x844): (1) Register — empty submit shows red 'Veuillez remplir tous les champs...' banner (Alert.alert → inline banner OK); valid submit redirects to /(tabs)/home (URL becomes /home). testID register-submit-button present + hitSlop applied. (2) Home shows 'Épisode de la semaine' section; verified that the latest updated episode ('La colère' initially, then 'Mes qualités' after bumping via PUT) appears as the featured episode, matching GET /api/episodes/latest/current. Library route still uses order (untested this run — no code change to library, and backend /episodes/season/{id} still sorts by 'order' 1). (3) Celebration flow — completed 'Mes qualités' end-to-end via Commencer button; the 4 pages appeared in the exact expected order with the exact expected labels: A) 'Bravo!' + '+5 Mopado$' → 'Suivant', B) 'Nouveau badge!' + 'Premier moment' → 'Voir la mission bonus', C) 'Mission bonus... si tu l'acceptes' → 'J'ai compris', D) 'À bientôt!' + closing message → 'Retour à l'accueil'. testIDs celebration-mopado-next, celebration-badge-next, bonus-mission-understood, closing-message-finish all resolve. (4) Admin /api/admin-panel Épisodes tab: 'Modifier' button pre-fills title/description/season/game type ('letters')/etc.; submit button reads 'Enregistrer les modifications', cancel button visible. Clicking 'Annuler modification' resets submit label to 'Créer l'épisode', hides cancel button, and clears the form. (5) 'Carte X sur Y' progress text is not rendered by CardsStepContent (verified via source code /app/frontend/app/session/[episodeId].tsx lines 439-464 — no progress indicator around cards). No user-facing regression detected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "session/[episodeId].tsx", "issue": "When the session URL is opened directly (deep-link, page refresh) BEFORE AuthContext has hydrated `user` from AsyncStorage, `startSession()` runs with user=null → no sessionId → tapping 'Terminer' shows 'Session invalide'. Reproduced twice by navigating to /session/{id} even after localStorage was populated. Workaround: users clicking Commencer from Home work fine (user is already loaded). Reference: /app/frontend/app/session/[episodeId].tsx:91-136 — useEffect depends only on [episodeId], not on user.", "testID": "close-session-button", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (shadow*)", "issue": "Pre-existing console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Not introduced by this iteration. Reference: /app/frontend/app/session/[episodeId].tsx (styles.header, cardContainer, bonusMissionCard) and shared components."},
+      {"component": "props.pointerEvents", "issue": "Pre-existing console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' — surfaces on the register screen. Not introduced by this iteration."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration_12.py",
+    "/app/test_reports/pytest/pytest_iteration_12.xml",
+    "/app/test_reports/iteration_12.json"
+  ],
+  "action_items": [
+    "(Optional/pre-existing) Fix deep-link session start bug: in /app/frontend/app/session/[episodeId].tsx add `user` to the useEffect dependency array (or guard loadEpisode() until user is truthy) so that direct-navigating to /session/{id} after refresh does not leave sessionId=null. Currently only affects deep-link/refresh path — normal Commencer flow works.",
+    "(Carry-over, optional) Migrate shadow* → boxShadow to silence console warnings.",
+    "(Carry-over, optional) Replace props.pointerEvents with style.pointerEvents."
+  ],
+  "critical_code_review_comments": [
+    "server.py:_cleanup_episode_user_data (368-398) correctly (a) pulls episode id from completed_episodes, (b) pulls badge_name from badges, (c) clamps mopado_dollars at max(0, current - reward), (d) sessions.delete_many by episode_id — all 4 steps verified against a real user.",
+    "server.py:update_episode (410-436) calls cleanup BEFORE writing new data — correct order; also preserves created_at while refreshing updated_at.",
+    "server.py:get_latest_episode (461-473) sort=[('updated_at',-1),('created_at',-1),('_id',-1)] handles legacy docs missing timestamps.",
+    "register.tsx correctly replaces Alert.alert with an inline errorBanner (works on web), calls Keyboard.dismiss() first, and adds testID + hitSlop on the submit button — the original 'nothing happens on click' bug is fixed.",
+    "session/[episodeId].tsx: the 4-step celebration chain (handleAfterMopado → handleAfterBadge → handleAfterBonusMission) correctly skips badge screen if badges_earned is empty and skips bonus screen if bonus_mission is falsy. Button label on BadgeCelebrationStep dynamically switches between 'Voir la mission bonus' and 'Suivant' based on hasBonusMission — verified live.",
+    "admin.html edit flow: editingEpisodeId + episodesCache + cancelEditEpisode() implementation is clean; PUT vs POST switch on submit is correct; when editing and no new video picked, it preserves the existing video_filename from cache (admin.html:822-827) — good UX."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% for the requested features (registration redirect, latest episode on Home, celebration 4-page flow with correct labels, admin edit/cancel, no 'Carte X sur Y')"},
+  "seed_data_creation": "Created 3 ephemeral test users via /api/auth/register (TEST_reg_*, TEST_dup_*, TEST_cleanup_*, TEST_ui_*, TEST_celeb4_*) and 3-4 test episodes inside a TEST_SEASON_* season. Fixture teardown deletes the season (which cascades to episodes) at module scope. Also PUT-bumped 'Mes qualités' to make it the 'latest' during frontend celebration test — this is a benign side-effect (updated_at refresh, no data change) but note that all users who had completed 'Mes qualités' will now have to redo it to earn the badge again (this is the documented cleanup behavior).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 12 features are fully green. Known deep-link bug: /session/{id} directly requires user context to be hydrated first — click Commencer from Home to reproduce a working session. Public URL: EXPO_PUBLIC_BACKEND_URL=https://mopado-family-1.preview.emergentagent.com. Admin panel: /api/admin-panel. Backend tests: pytest /app/backend/tests/test_iteration_12.py (9 tests). Note: 'Mes qualités' updated_at was bumped by our frontend test → users who completed it before iteration_12 have been reset (this is expected iteration_12 behavior when an episode is edited).",
+  "rca_of_issue": "N/A — this iteration was feature verification, not bug RCA. The only new bug surfaced (deep-link session invalide) is a latent pre-existing race condition between AuthContext hydration and session/[episodeId].tsx's useEffect; it does not affect the normal user path (Home → Commencer) and is out of scope for iteration_12."
+}

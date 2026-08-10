@@ -365,37 +365,112 @@ async def get_episode(episode_id: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+async def _cleanup_episode_user_data(episode_id: str, episode_doc: dict):
+    """When an episode is modified or deleted, remove Mopado$, badges,
+    completed episode entries, and session records associated with it from
+    all users. This forces families to redo the episode from scratch.
+    """
+    try:
+        mopado_reward = int(episode_doc.get("mopado_reward", 0) or 0)
+        badge_name = episode_doc.get("badge_name")
+
+        # Find all users who had completed this episode
+        users_completed = await db.users.find(
+            {"completed_episodes": episode_id}
+        ).to_list(1000)
+
+        for u in users_completed:
+            pull_ops = {"completed_episodes": episode_id}
+            if badge_name:
+                pull_ops["badges"] = badge_name
+
+            update_ops = {"$pull": pull_ops}
+            if mopado_reward > 0:
+                current = int(u.get("mopado_dollars", 0) or 0)
+                new_val = max(0, current - mopado_reward)
+                update_ops["$set"] = {"mopado_dollars": new_val}
+
+            await db.users.update_one({"_id": u["_id"]}, update_ops)
+
+        # Remove all session records for this episode (closing words history)
+        await db.sessions.delete_many({"episode_id": episode_id})
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Cleanup error for episode {episode_id}: {e}")
+
+
 @api_router.post("/episodes")
 async def create_episode(episode: EpisodeCreate):
     episode_dict = episode.dict()
+    now = datetime.utcnow()
+    episode_dict["created_at"] = now
+    episode_dict["updated_at"] = now
     result = await db.episodes.insert_one(episode_dict)
     return {"id": str(result.inserted_id), "message": "Episode created"}
 
 @api_router.put("/episodes/{episode_id}")
 async def update_episode(episode_id: str, episode: EpisodeCreate):
     try:
+        # Get previous episode data for cleanup
+        old_episode = await db.episodes.find_one({"_id": ObjectId(episode_id)})
+        if not old_episode:
+            raise HTTPException(status_code=404, detail="Episode not found")
+
+        # Cleanup user rewards/badges/sessions tied to the OLD version
+        await _cleanup_episode_user_data(episode_id, old_episode)
+
+        # Update with new data + refresh updated_at
+        update_data = episode.dict()
+        update_data["updated_at"] = datetime.utcnow()
+        # preserve created_at
+        if "created_at" not in old_episode:
+            update_data["created_at"] = old_episode.get("updated_at") or datetime.utcnow()
+
         await db.episodes.update_one(
             {"_id": ObjectId(episode_id)},
-            {"$set": episode.dict()}
+            {"$set": update_data}
         )
         return {"message": "Episode updated"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.delete("/episodes/{episode_id}")
 async def delete_episode(episode_id: str):
     try:
-        # Get episode to delete video file
+        # Get episode to delete video file & cleanup user data
         episode = await db.episodes.find_one({"_id": ObjectId(episode_id)})
-        if episode and episode.get("video_filename"):
+        if not episode:
+            raise HTTPException(status_code=404, detail="Episode not found")
+
+        # Cleanup user rewards/badges/sessions
+        await _cleanup_episode_user_data(episode_id, episode)
+
+        if episode.get("video_filename"):
             video_path = VIDEOS_DIR / episode["video_filename"]
             if video_path.exists():
                 video_path.unlink()
-        
+
         await db.episodes.delete_one({"_id": ObjectId(episode_id)})
         return {"message": "Episode deleted"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/episodes/latest/current")
+async def get_latest_episode():
+    """Returns the most recently created/updated episode across all seasons.
+    Used by the Home screen to display the 'episode of the week'.
+    """
+    # Use updated_at when available, else created_at, else fall back to _id
+    episode = await db.episodes.find_one(
+        {},
+        sort=[("updated_at", -1), ("created_at", -1), ("_id", -1)]
+    )
+    if not episode:
+        return None
+    return clean_doc(episode)
 
 # ==================== SESSION ROUTES ====================
 

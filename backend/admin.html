@@ -450,7 +450,8 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
                         <label>Badge - Description (optionnel)</label>
                         <input type="text" id="episode-badge-description" placeholder="Ex: Vous avez découvert vos qualités en famille">
                     </div>
-                    <button type="submit" class="btn btn-primary">Créer l'épisode</button>
+                    <button type="submit" class="btn btn-primary" id="episode-submit-btn">Créer l'épisode</button>
+                    <button type="button" class="btn btn-secondary" id="episode-cancel-edit-btn" style="display:none; margin-left: 8px;" onclick="cancelEditEpisode()">Annuler modification</button>
                 </form>
             </div>
 
@@ -470,6 +471,11 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
     <script>
         const API_URL = window.location.origin + '/api';
 
+        // Track the currently edited episode id. null when creating a new one.
+        let editingEpisodeId = null;
+        // Keep a cache of loaded episodes so we can find them by id when editing
+        let episodesCache = [];
+
         // Tab switching
         function switchTab(tabName) {
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
@@ -480,6 +486,7 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             
             if (tabName === 'episodes') {
                 loadSeasonsForSelect();
+                loadEpisodes();
             }
         }
         
@@ -805,26 +812,124 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             };
             
             try {
-                const response = await fetch(`${API_URL}/episodes`, {
-                    method: 'POST',
+                const isEditing = !!editingEpisodeId;
+                const url = isEditing
+                    ? `${API_URL}/episodes/${editingEpisodeId}`
+                    : `${API_URL}/episodes`;
+                const method = isEditing ? 'PUT' : 'POST';
+
+                // When editing, if no new video was picked, keep the existing filename
+                if (isEditing && !videoFile) {
+                    const existing = episodesCache.find(e => e.id === editingEpisodeId);
+                    if (existing && existing.video_filename && !data.video_filename) {
+                        data.video_filename = existing.video_filename;
+                    }
+                }
+
+                const response = await fetch(url, {
+                    method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
-                
+
                 if (response.ok) {
-                    showAlert('episode-alert', 'Épisode créé avec succès !', 'success');
-                    document.getElementById('episode-form').reset();
+                    showAlert(
+                        'episode-alert',
+                        isEditing
+                            ? '✅ Épisode modifié ! Les Mopado$/badges/mots gagnés sur cette version ont été retirés des familles.'
+                            : 'Épisode créé avec succès !',
+                        'success'
+                    );
+                    cancelEditEpisode();
                     document.getElementById('video-file-name').textContent = 'Aucun fichier choisi';
                     loadEpisodes();
                     loadStats();
                 } else {
                     const errorData = await response.json();
-                    showAlert('episode-alert', 'Erreur lors de la création: ' + (errorData.detail || 'Erreur inconnue'), 'error');
+                    showAlert('episode-alert', 'Erreur: ' + (errorData.detail || 'Erreur inconnue'), 'error');
                 }
             } catch (error) {
                 showAlert('episode-alert', 'Erreur: ' + error.message, 'error');
             }
         });
+
+        // Populate the episode form with a specific episode's data for editing
+        async function editEpisode(id) {
+            const ep = episodesCache.find(e => e.id === id);
+            if (!ep) return;
+
+            editingEpisodeId = id;
+            document.getElementById('episode-submit-btn').textContent = "Enregistrer les modifications";
+            document.getElementById('episode-cancel-edit-btn').style.display = 'inline-block';
+
+            // Make sure the seasons select is loaded
+            await loadSeasonsForSelect();
+
+            document.getElementById('episode-season').value = ep.season_id || '';
+            document.getElementById('episode-title').value = ep.title || '';
+            document.getElementById('episode-description').value = ep.description || '';
+            document.getElementById('episode-order').value = ep.order ?? 1;
+            document.getElementById('video-file-name').textContent = ep.video_filename
+                ? `Vidéo actuelle: ${ep.video_filename}`
+                : 'Aucun fichier choisi';
+            // Reset the file input (we can't set files programmatically for security)
+            document.getElementById('episode-video').value = '';
+
+            // Cards
+            document.getElementById('episode-cards').value = (ep.cards || [])
+                .map(c => c.title ? `${c.title} | ${c.content}` : c.content)
+                .join('\n');
+            document.getElementById('episode-cards-message').value =
+                ep.cards_message || 'On répond chacun son tour.';
+
+            // Mini-game
+            const g = ep.mini_game || {};
+            document.getElementById('episode-game-type').value = g.type || '';
+            document.getElementById('episode-game-name').value = g.name || '';
+            document.getElementById('episode-game-instructions').value = g.instructions || '';
+            updateGameTypeFields();
+
+            if (g.type === 'true_false') {
+                const lines = (g.data?.statements || [])
+                    .map(s => `${s.text} | ${s.answer ? 'vrai' : 'faux'}`)
+                    .join('\n');
+                document.getElementById('episode-true-false-statements').value = lines;
+            } else if (g.type === 'ranking') {
+                document.getElementById('episode-ranking-items').value =
+                    (g.data?.items || []).join('\n');
+            } else if (g.type === 'quiz') {
+                const lines = (g.data?.questions || [])
+                    .map(q => `${q.question} | ${q.answers?.[0] || ''} | ${q.answers?.[1] || ''} | ${q.answers?.[2] || ''} | ${q.correct ?? 0}`)
+                    .join('\n');
+                document.getElementById('episode-quiz-questions').value = lines;
+            }
+
+            // Cards after game
+            document.getElementById('episode-cards-after').value = (ep.cards_after_game || [])
+                .map(c => c.title ? `${c.title} | ${c.content}` : c.content)
+                .join('\n');
+
+            document.getElementById('episode-reward').value = ep.mopado_reward ?? 5;
+            document.getElementById('episode-reward-message').value =
+                ep.reward_message || 'Merci pour ce beau moment ensemble !';
+            document.getElementById('episode-bonus-mission').value = ep.bonus_mission || '';
+            document.getElementById('episode-closing-message').value =
+                ep.closing_message || 'Rendez-vous la semaine prochaine pour un nouveau moment qui compte, ensemble !';
+            document.getElementById('episode-badge-name').value = ep.badge_name || '';
+            document.getElementById('episode-badge-description').value = ep.badge_description || '';
+
+            // Scroll to top of form
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function cancelEditEpisode() {
+            editingEpisodeId = null;
+            document.getElementById('episode-submit-btn').textContent = "Créer l'épisode";
+            document.getElementById('episode-cancel-edit-btn').style.display = 'none';
+            document.getElementById('episode-form').reset();
+            document.getElementById('video-file-name').textContent = 'Aucun fichier choisi';
+            updateGameTypeFields();
+        }
 
         async function loadEpisodes() {
             const seasonFilter = document.getElementById('filter-season')?.value;
@@ -844,6 +949,9 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
                     allEpisodes.push(...episodes.map(ep => ({ ...ep, season_name: season.name })));
                 }
                 
+                // Update cache used by editEpisode()
+                episodesCache = allEpisodes;
+
                 const list = document.getElementById('episodes-list');
                 if (allEpisodes.length === 0) {
                     list.innerHTML = '<p style="color: #7F8C8D;">Aucun épisode créé</p>';
@@ -861,6 +969,7 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
                             </p>
                         </div>
                         <div class="list-item-actions">
+                            <button class="btn btn-secondary" onclick="editEpisode('${episode.id}')">Modifier</button>
                             <button class="btn btn-danger" onclick="deleteEpisode('${episode.id}')">Supprimer</button>
                         </div>
                     </div>
@@ -871,13 +980,14 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
         }
 
         async function deleteEpisode(id) {
-            if (!confirm('Êtes-vous sûr de vouloir supprimer cet épisode ?')) {
+            if (!confirm('Supprimer cet épisode ?\n\n⚠️ Les Mopado$, badges et mots de fin gagnés par les familles sur cet épisode seront également retirés.')) {
                 return;
             }
             
             try {
                 const response = await fetch(`${API_URL}/episodes/${id}`, { method: 'DELETE' });
                 if (response.ok) {
+                    if (editingEpisodeId === id) cancelEditEpisode();
                     loadEpisodes();
                     loadStats();
                 }

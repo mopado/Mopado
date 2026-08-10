@@ -54,35 +54,48 @@ export default function HomeScreen() {
     try {
       // Refresh user first and get the latest data
       await refreshUser();
-      
+
       // Get the fresh user data from storage (since state update is async)
       const freshUserData = await fetch(`${BACKEND_URL}/api/family/${user?.id}`)
         .then(r => r.ok ? r.json() : null)
         .catch(() => null);
-      
-      const completedEpisodes = freshUserData?.completed_episodes || user?.completed_episodes || [];
-      
-      // Load seasons
-      const seasonsResponse = await fetch(`${BACKEND_URL}/api/seasons`);
-      if (seasonsResponse.ok) {
-        const seasonsData = await seasonsResponse.json();
-        setSeasons(seasonsData);
 
-        // Find first uncompleted episode across all seasons
-        let foundEpisode: Episode | null = null;
-        let foundSeasonId: string | null = null;
-        
+      const completedEpisodes: string[] = freshUserData?.completed_episodes || user?.completed_episodes || [];
+
+      // Load seasons (still needed for the "Saison en cours" card)
+      const seasonsResponse = await fetch(`${BACKEND_URL}/api/seasons`);
+      let seasonsData: Season[] = [];
+      if (seasonsResponse.ok) {
+        seasonsData = await seasonsResponse.json();
+        setSeasons(seasonsData);
+      }
+
+      // Fetch the latest created/updated episode across the whole library
+      // (this becomes the "Episode of the week")
+      let foundEpisode: Episode | null = null;
+      let foundSeasonId: string | null = null;
+
+      const latestRes = await fetch(`${BACKEND_URL}/api/episodes/latest/current`);
+      if (latestRes.ok) {
+        const latestEpisode = await latestRes.json();
+        if (latestEpisode && latestEpisode.id) {
+          foundEpisode = latestEpisode;
+          foundSeasonId = latestEpisode.season_id;
+        }
+      }
+
+      // Fallback: if no "latest" or the family already completed it, walk the
+      // library in season/episode order to find the next uncompleted one.
+      if (!foundEpisode || completedEpisodes.includes(foundEpisode.id)) {
         for (const season of seasonsData) {
           const episodesResponse = await fetch(
             `${BACKEND_URL}/api/episodes/season/${season.id}`
           );
           if (episodesResponse.ok) {
             const episodesData = await episodesResponse.json();
-            // Find first episode not yet completed (use fresh data)
             const uncompletedEpisode = episodesData.find(
               (ep: Episode) => !completedEpisodes.includes(ep.id)
             );
-            
             if (uncompletedEpisode) {
               foundEpisode = uncompletedEpisode;
               foundSeasonId = season.id;
@@ -90,11 +103,15 @@ export default function HomeScreen() {
             }
           }
         }
-        
-        // If all episodes are completed, foundEpisode stays null (no episode shown)
-        setCurrentEpisode(foundEpisode);
-        setCurrentSeasonId(foundSeasonId);
+        // If everything is completed, keep null so the "all completed" card shows
+        if (foundEpisode && completedEpisodes.includes(foundEpisode.id)) {
+          foundEpisode = null;
+          foundSeasonId = null;
+        }
       }
+
+      setCurrentEpisode(foundEpisode);
+      setCurrentSeasonId(foundSeasonId);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

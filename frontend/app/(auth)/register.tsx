@@ -8,8 +8,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Link } from 'expo-router';
@@ -26,23 +26,33 @@ export default function RegisterScreen() {
   const [childrenAges, setChildrenAges] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const { register } = useAuth();
   const router = useRouter();
 
   const handleRegister = async () => {
+    // Close keyboard right away so the user gets clear feedback
+    Keyboard.dismiss();
+    setErrorMsg('');
+
     if (!email || !password || !confirmPassword || !familyName || !nbChildren) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+      setErrorMsg('Veuillez remplir tous les champs obligatoires (*)');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMsg('Le mot de passe doit contenir au moins 6 caractères');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Erreur', 'Les mots de passe ne correspondent pas');
+      setErrorMsg('Les mots de passe ne correspondent pas');
       return;
     }
 
     const nbChildrenNum = parseInt(nbChildren);
     if (isNaN(nbChildrenNum) || nbChildrenNum < 1) {
-      Alert.alert('Erreur', 'Nombre d\'enfants invalide');
+      setErrorMsg("Nombre d'enfants invalide (au moins 1)");
       return;
     }
 
@@ -57,10 +67,12 @@ export default function RegisterScreen() {
 
     setIsLoading(true);
     try {
-      await register(email, password, familyName, nbChildrenNum, agesArray);
+      await register(email.trim().toLowerCase(), password, familyName.trim(), nbChildrenNum, agesArray);
       router.replace('/(tabs)/home');
     } catch (error: any) {
-      Alert.alert('Erreur', error.message || 'Erreur lors de l\'inscription');
+      const msg = error?.message || "Erreur lors de l'inscription";
+      setErrorMsg(msg);
+      console.error('Register error:', error);
     } finally {
       setIsLoading(false);
     }
@@ -86,6 +98,13 @@ export default function RegisterScreen() {
             <Text style={styles.title}>Créer un compte</Text>
             <Text style={styles.subtitle}>Rejoignez Mopado et créez vos moments en famille</Text>
           </View>
+
+          {errorMsg ? (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle" size={20} color={colors.error} />
+              <Text style={styles.errorBannerText}>{errorMsg}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.form}>
             <View style={styles.inputContainer}>
@@ -174,6 +193,9 @@ export default function RegisterScreen() {
               style={[styles.button, isLoading && styles.buttonDisabled]}
               onPress={handleRegister}
               disabled={isLoading}
+              activeOpacity={0.8}
+              testID="register-submit-button"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               {isLoading ? (
                 <ActivityIndicator color={colors.textWhite} />
@@ -208,6 +230,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: 24,
+    paddingBottom: 60,
   },
   header: {
     marginBottom: 32,
@@ -277,5 +300,22 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 14,
     fontWeight: '600',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.error,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  errorBannerText: {
+    flex: 1,
+    color: colors.error,
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
