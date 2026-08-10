@@ -1,0 +1,42 @@
+{
+  "summary": "Validated the 2 user-reported bug fixes end-to-end. Backend: 6/6 pytest cases PASS (registration + already_completed flow + data integrity). Frontend: Orange banner 'Épisode déjà effectué • Aucun Mopado$ à gagner' is correctly rendered at top of session screen only when the user has previously completed that episode. Verified both cases side-by-side on mobile viewport (390x844): (a) 'Mes qualités' -> BANNER shown (episode is in user.completed_episodes), (b) 'La colère' (weekly, uncompleted) -> NO banner shown. Data cleanup persisted: famille.test@mopado.fr had 0 stale IDs before and after test replay. The test flow also exercised: /auth/register (200 with token+user, no _id leak), /family/{id} lookup for the newly-registered user (empty completed_episodes), duplicate email -> 400, session start/complete/replay -> complete #2 returns mopado_earned=0 & already_completed=true.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/sessions/start", "issue": "Endpoint does NOT return an 'already_completed' flag in its response (only session_id + message). The frontend's `setAlreadyCompleted(data.already_completed || false)` at session/[episodeId].tsx:191 is inside the COMPLETE-response handler, and the banner instead relies on `user.completed_episodes.includes(episodeId)` (line 80). This works, but consider returning already_completed from /sessions/start for consistency and defensive fallback if user state is stale."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "styles (shadow*)", "issue": "Console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' (RN Web). Non-blocking. Reference: /app/frontend/app/session/[episodeId].tsx (header shadow* props) and other shared components."},
+      {"component": "props.pointerEvents", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Non-blocking."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_mopado_bug_fixes.py",
+    "/app/test_reports/pytest/pytest_bug_fixes.xml",
+    "/app/test_reports/iteration_10.json"
+  ],
+  "action_items": [
+    "Optional: return `already_completed` from POST /api/sessions/start so the banner logic has a server-authoritative signal even if the local user state is stale.",
+    "Optional cleanup: migrate 'shadow*' style props to 'boxShadow' and 'props.pointerEvents' to 'style.pointerEvents' to silence RN Web deprecation warnings.",
+    "Update /app/memory/test_credentials.md: two episodes now exist ('Mes qualités' 6a7920b673e294da877d8c35 and 'La colère' 6a79246773e294da877d8c3b) — file still says 'Only 1 episode'."
+  ],
+  "critical_code_review_comments": [
+    "Banner visibility relies on stale local user state; after completing an episode via /sessions/{id}/complete the code calls refreshUser() (line 196) which is correct — good.",
+    "Backend /sessions/{session_id}/complete correctly guards against duplicate rewards using BOTH session.completed and user.completed_episodes checks (server.py:426-431 & 456-462).",
+    "Register response and GET /api/family/{id} both correctly exclude MongoDB _id (server.py:220-229, 275-284)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_mopado_bug_fixes.py (new regression suite)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (banner visible/hidden correctly for both episodes)"},
+  "seed_data_creation": "Test suite creates transient users (email prefix test_<uuid8>@mopado.fr) via /auth/register and cleans them up in-line (deleted after run via one-shot Mongo script). Session completion for famille.test@mopado.fr on 'Mes qualités' was executed as part of the flow — episode was already in completed_episodes before, so no state change to user's counters.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The seeded family famille.test@mopado.fr now has 'Mes qualités' in completed_episodes (banner-eligible) and 'La colère' NOT completed (weekly episode, no banner). Two episodes exist in 'Saison test'. Backend regression suite: pytest /app/backend/tests/test_mopado_bug_fixes.py. Public backend URL is read from EXPO_PUBLIC_BACKEND_URL.",
+  "rca_of_issue": "Original bugs: (1) Registration was reported failing in preview but backend was correct — could not reproduce; POST /api/auth/register returns 200 and user is retrievable via /api/family/{id}. (2) 'Épisode déjà effectué' banner not shown — root cause was stale episode IDs in users' completed_episodes after episodes were recreated in dev; main agent cleaned DB and added a visible orange banner at the top of the session screen. Both fixes verified working: banner shows for 'Mes qualités' (completed) and hides for 'La colère' (not completed)."
+}

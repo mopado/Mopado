@@ -75,6 +75,9 @@ export default function SessionScreen() {
   const [badgesEarned, setBadgesEarned] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCompleting, setIsCompleting] = useState(false);
+  
+  // Detect if episode is already completed BEFORE starting the session
+  const isAlreadyCompleted = user?.completed_episodes?.includes(episodeId as string) || false;
 
   useEffect(() => {
     loadEpisode();
@@ -240,6 +243,16 @@ export default function SessionScreen() {
         </View>
         <View style={styles.placeholder} />
       </View>
+      
+      {/* Already completed banner */}
+      {isAlreadyCompleted && (
+        <View style={styles.alreadyCompletedBanner}>
+          <Ionicons name="checkmark-circle" size={18} color={colors.textWhite} />
+          <Text style={styles.alreadyCompletedBannerText}>
+            Épisode déjà effectué • Aucun Mopado$ à gagner
+          </Text>
+        </View>
+      )}
 
       {/* Video Step */}
       {currentStep === 'video' && (
@@ -954,6 +967,20 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 40,
+  },
+  alreadyCompletedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.info,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  alreadyCompletedBannerText: {
+    color: colors.textWhite,
+    fontSize: 13,
+    fontWeight: '600',
   },
   stepContainer: {
     flex: 1,
