@@ -948,6 +948,68 @@ async def delete_planning(family_id: str):
     return {"message": "Planning removed"}
 
 
+# ============================================================================
+# Weekly Word (Le mot de la semaine)
+# ============================================================================
+# A single-document collection ("current" weekly word). Admin can edit anytime.
+# Structure: { key: "current", text: str, category: "citation|humour|anecdote|autre",
+#              author: Optional[str], updated_at: datetime }
+
+class WeeklyWordPayload(BaseModel):
+    text: str
+    category: Optional[str] = "citation"  # citation, humour, anecdote, autre
+    author: Optional[str] = None
+
+
+def _serialize_weekly_word(doc: Optional[dict]) -> Optional[dict]:
+    if not doc:
+        return None
+    return {
+        "text": doc.get("text", ""),
+        "category": doc.get("category", "citation"),
+        "author": doc.get("author"),
+        "updated_at": doc.get("updated_at").isoformat() if doc.get("updated_at") else None,
+    }
+
+
+@api_router.get("/weekly-word")
+async def get_weekly_word():
+    """Return the current weekly word (or null if none set)."""
+    doc = await db.weekly_words.find_one({"key": "current"})
+    return _serialize_weekly_word(doc)
+
+
+@api_router.put("/weekly-word")
+async def upsert_weekly_word(payload: WeeklyWordPayload):
+    """Create or update the current weekly word (admin only in practice)."""
+    text = (payload.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Le texte est requis")
+    category = (payload.category or "citation").strip().lower()
+    if category not in ("citation", "humour", "anecdote", "autre"):
+        category = "autre"
+    doc = {
+        "key": "current",
+        "text": text,
+        "category": category,
+        "author": (payload.author or "").strip() or None,
+        "updated_at": datetime.utcnow(),
+    }
+    await db.weekly_words.update_one(
+        {"key": "current"},
+        {"$set": doc},
+        upsert=True,
+    )
+    return {"message": "Weekly word saved", "weekly_word": _serialize_weekly_word(doc)}
+
+
+@api_router.delete("/weekly-word")
+async def delete_weekly_word():
+    """Remove the current weekly word."""
+    await db.weekly_words.delete_one({"key": "current"})
+    return {"message": "Weekly word removed"}
+
+
 @api_router.get("/progress/{family_id}")
 async def get_family_progress(family_id: str):
     try:

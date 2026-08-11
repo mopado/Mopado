@@ -287,6 +287,7 @@
         <div class="tabs">
             <button class="tab active" onclick="switchTab('seasons')">Saisons</button>
             <button class="tab" onclick="switchTab('episodes')">Épisodes</button>
+            <button class="tab" onclick="switchTab('content')">Contenu</button>
             <button class="tab" onclick="switchTab('families')">Familles</button>
         </div>
 
@@ -558,6 +559,38 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             </div>
         </div>
 
+        <!-- Content Tab (Weekly Word etc.) -->
+        <div id="content-tab" class="tab-content">
+            <div class="card">
+                <h2>Le mot de la semaine</h2>
+                <div id="weekly-word-alert"></div>
+                <p style="color: #7F8C8D; font-size: 13px; margin-bottom: 12px;">
+                    S'affiche sur la page d'accueil des familles. Elles touchent la carte pour révéler le contenu.
+                    Vous pouvez modifier ce mot à tout moment — les familles verront la nouvelle version à leur prochaine visite.
+                </p>
+                <div class="form-group">
+                    <label>Catégorie</label>
+                    <select id="weekly-word-category">
+                        <option value="citation">Citation</option>
+                        <option value="humour">Humour</option>
+                        <option value="anecdote">Anecdote</option>
+                        <option value="autre">Autre</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Texte *</label>
+                    <textarea id="weekly-word-text" rows="4" placeholder="Ex: La famille, c'est le refuge quand tout va mal, et le tremplin quand tout va bien."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Auteur (optionnel)</label>
+                    <input type="text" id="weekly-word-author" placeholder="Ex: Anonyme, Victor Hugo, Papa...">
+                </div>
+                <div id="weekly-word-status" style="margin: 10px 0; color: #7F8C8D; font-size: 13px;"></div>
+                <button type="button" class="btn btn-primary" onclick="saveWeeklyWord()">Enregistrer</button>
+                <button type="button" class="btn btn-secondary" style="margin-left:8px" onclick="deleteWeeklyWord()">Retirer</button>
+            </div>
+        </div>
+
         <!-- Families Tab -->
         <div id="families-tab" class="tab-content">
             <div class="card">
@@ -594,6 +627,9 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             }
             if (tabName === 'families') {
                 loadFamilies();
+            }
+            if (tabName === 'content') {
+                loadWeeklyWord();
             }
         }
         
@@ -1185,6 +1221,73 @@ Envie | Qu'aimerais-tu refaire la semaine prochaine ?"></textarea>
             setTimeout(() => {
                 alertDiv.innerHTML = '';
             }, 5000);
+        }
+
+        // Weekly Word (Mot de la semaine)
+        async function loadWeeklyWord() {
+            const status = document.getElementById('weekly-word-status');
+            status.textContent = 'Chargement...';
+            try {
+                const r = await fetch(`${API_URL}/weekly-word`);
+                if (!r.ok) {
+                    status.textContent = '';
+                    return;
+                }
+                const w = await r.json();
+                if (w && w.text) {
+                    document.getElementById('weekly-word-text').value = w.text || '';
+                    document.getElementById('weekly-word-category').value = w.category || 'citation';
+                    document.getElementById('weekly-word-author').value = w.author || '';
+                    const updated = w.updated_at ? new Date(w.updated_at).toLocaleString('fr-FR') : '';
+                    status.textContent = updated ? `Dernière mise à jour : ${updated}` : '';
+                } else {
+                    document.getElementById('weekly-word-text').value = '';
+                    document.getElementById('weekly-word-category').value = 'citation';
+                    document.getElementById('weekly-word-author').value = '';
+                    status.textContent = 'Aucun mot défini pour le moment.';
+                }
+            } catch (e) {
+                status.textContent = '';
+            }
+        }
+
+        async function saveWeeklyWord() {
+            const text = document.getElementById('weekly-word-text').value.trim();
+            const category = document.getElementById('weekly-word-category').value;
+            const author = document.getElementById('weekly-word-author').value.trim();
+            if (!text) {
+                showAlert('weekly-word-alert', 'Le texte est requis.', 'error');
+                return;
+            }
+            try {
+                const r = await fetch(`${API_URL}/weekly-word`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, category, author: author || null }),
+                });
+                if (r.ok) {
+                    showAlert('weekly-word-alert', 'Mot de la semaine enregistré avec succès.', 'success');
+                    loadWeeklyWord();
+                } else {
+                    const err = await r.json().catch(() => ({}));
+                    showAlert('weekly-word-alert', err.detail || 'Erreur lors de l\'enregistrement.', 'error');
+                }
+            } catch (e) {
+                showAlert('weekly-word-alert', 'Erreur réseau.', 'error');
+            }
+        }
+
+        async function deleteWeeklyWord() {
+            if (!confirm('Retirer le mot de la semaine ? Il ne s\'affichera plus sur l\'accueil des familles.')) return;
+            try {
+                const r = await fetch(`${API_URL}/weekly-word`, { method: 'DELETE' });
+                if (r.ok) {
+                    showAlert('weekly-word-alert', 'Mot de la semaine retiré.', 'success');
+                    loadWeeklyWord();
+                }
+            } catch (e) {
+                showAlert('weekly-word-alert', 'Erreur réseau.', 'error');
+            }
         }
 
         // Families

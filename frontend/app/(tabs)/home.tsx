@@ -17,6 +17,19 @@ import PlanningPicker, { describePlanning, Planning } from '@/src/components/Pla
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
+function categoryLabel(cat?: string | null): string {
+  switch ((cat || '').toLowerCase()) {
+    case 'citation':
+      return 'Citation';
+    case 'humour':
+      return 'Humour';
+    case 'anecdote':
+      return 'Anecdote';
+    default:
+      return 'À découvrir';
+  }
+}
+
 interface Season {
   id: string;
   name: string;
@@ -42,6 +55,8 @@ export default function HomeScreen() {
   const [planning, setPlanning] = useState<Planning | null>(null);
   const [showPlanningEditor, setShowPlanningEditor] = useState(false);
   const [availableQuiz, setAvailableQuiz] = useState<{ id: string; name: string; days_remaining: number } | null>(null);
+  const [weeklyWord, setWeeklyWord] = useState<{ text: string; category: string; author?: string | null } | null>(null);
+  const [weeklyWordRevealed, setWeeklyWordRevealed] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -73,6 +88,15 @@ export default function HomeScreen() {
           .then(p => setPlanning(p))
           .catch(() => setPlanning(null));
       }
+
+      // Load "Mot de la semaine" in parallel
+      fetch(`${BACKEND_URL}/api/weekly-word`)
+        .then(r => r.ok ? r.json() : null)
+        .then(w => {
+          setWeeklyWord(w);
+          setWeeklyWordRevealed(false);
+        })
+        .catch(() => setWeeklyWord(null));
 
       // Load seasons (still needed for the "Saison en cours" card)
       const seasonsResponse = await fetch(`${BACKEND_URL}/api/seasons`);
@@ -271,6 +295,43 @@ export default function HomeScreen() {
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={22} color={colors.textWhite} />
+          </TouchableOpacity>
+        ) : null}
+
+        {/* Weekly Word (Le mot de la semaine) */}
+        {weeklyWord && weeklyWord.text ? (
+          <TouchableOpacity
+            style={styles.weeklyWordCard}
+            onPress={() => setWeeklyWordRevealed((v) => !v)}
+            activeOpacity={0.85}
+            testID="weekly-word-card"
+          >
+            <View style={styles.weeklyWordHeader}>
+              <View style={styles.weeklyWordIconWrap}>
+                <Ionicons name="sparkles" size={20} color={colors.textWhite} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.weeklyWordTitle}>Le mot de la semaine</Text>
+                <Text style={styles.weeklyWordCategory}>
+                  {categoryLabel(weeklyWord.category)}
+                </Text>
+              </View>
+              <Ionicons
+                name={weeklyWordRevealed ? 'chevron-up' : 'chevron-down'}
+                size={22}
+                color={colors.primary}
+              />
+            </View>
+            {weeklyWordRevealed ? (
+              <View style={styles.weeklyWordBody}>
+                <Text style={styles.weeklyWordText}>« {weeklyWord.text} »</Text>
+                {weeklyWord.author ? (
+                  <Text style={styles.weeklyWordAuthor}>— {weeklyWord.author}</Text>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={styles.weeklyWordTeaser}>Touchez pour découvrir</Text>
+            )}
           </TouchableOpacity>
         ) : null}
 
@@ -587,6 +648,63 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundTertiary,
     borderWidth: 1,
     borderColor: colors.primaryLight,
+  },
+  weeklyWordCard: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+  },
+  weeklyWordHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  weeklyWordIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weeklyWordTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  weeklyWordCategory: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  weeklyWordTeaser: {
+    marginTop: 10,
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  weeklyWordBody: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.backgroundTertiary,
+  },
+  weeklyWordText: {
+    fontSize: 16,
+    color: colors.text,
+    lineHeight: 24,
+    fontStyle: 'italic',
+  },
+  weeklyWordAuthor: {
+    marginTop: 8,
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'right',
+    fontWeight: '600',
   },
   planningCardHeader: {
     flexDirection: 'row',
