@@ -9,6 +9,7 @@ interface User {
   family_name: string;
   nb_children: number;
   children_ages: number[];
+  members?: string[];
   mopado_dollars: number;
   badges: string[];
   completed_episodes: string[];
@@ -19,7 +20,7 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, familyName: string, nbChildren: number, childrenAges: number[]) => Promise<void>;
+  register: (email: string, password: string, familyName: string, nbChildren: number, childrenAges: number[], members?: string[]) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -76,7 +77,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     password: string,
     familyName: string,
     nbChildren: number,
-    childrenAges: number[]
+    childrenAges: number[],
+    members?: string[]
   ) => {
     const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
       method: 'POST',
@@ -87,6 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         family_name: familyName,
         nb_children: nbChildren,
         children_ages: childrenAges,
+        members: members || [],
       }),
     });
 

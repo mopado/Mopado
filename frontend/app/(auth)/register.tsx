@@ -24,6 +24,7 @@ export default function RegisterScreen() {
   const [familyName, setFamilyName] = useState('');
   const [nbChildren, setNbChildren] = useState('');
   const [childrenAges, setChildrenAges] = useState('');
+  const [membersInput, setMembersInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -65,9 +66,18 @@ export default function RegisterScreen() {
         .filter((age) => !isNaN(age));
     }
 
+    // Parse members (optional first names of family — parents + kids)
+    let membersArray: string[] = [];
+    if (membersInput.trim()) {
+      membersArray = membersInput
+        .split(',')
+        .map((m) => m.trim())
+        .filter(Boolean);
+    }
+
     setIsLoading(true);
     try {
-      await register(email.trim().toLowerCase(), password, familyName.trim(), nbChildrenNum, agesArray);
+      await register(email.trim().toLowerCase(), password, familyName.trim(), nbChildrenNum, agesArray, membersArray);
       router.replace('/(tabs)/home');
     } catch (error: any) {
       const msg = error?.message || "Erreur lors de l'inscription";
@@ -186,6 +196,18 @@ export default function RegisterScreen() {
                 value={childrenAges}
                 onChangeText={setChildrenAges}
                 keyboardType="numbers-and-punctuation"
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Ionicons name="people-circle-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Prénoms des membres (séparés par des virgules)"
+                placeholderTextColor={colors.textSecondary}
+                value={membersInput}
+                onChangeText={setMembersInput}
+                autoCapitalize="words"
               />
             </View>
 

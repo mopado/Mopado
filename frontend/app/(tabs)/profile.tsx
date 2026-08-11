@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  TextInput,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -16,12 +18,65 @@ import ConfirmModal from '@/src/components/ConfirmModal';
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const router = useRouter();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+
+  // Team members editor state
+  const [members, setMembers] = useState<string[]>([]);
+  const [isSavingMembers, setIsSavingMembers] = useState(false);
+  const [membersMsg, setMembersMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  useEffect(() => {
+    setMembers(user?.members && user.members.length > 0 ? [...user.members] : ['']);
+  }, [user?.members]);
+
+  const updateMember = (idx: number, value: string) => {
+    setMembers((prev) => {
+      const next = [...prev];
+      next[idx] = value;
+      return next;
+    });
+  };
+
+  const addMember = () => {
+    setMembers((prev) => [...prev, '']);
+  };
+
+  const removeMember = (idx: number) => {
+    setMembers((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const saveMembers = async () => {
+    if (!user?.id) return;
+    setIsSavingMembers(true);
+    setMembersMsg(null);
+    try {
+      const cleaned = members.map((m) => m.trim()).filter(Boolean);
+      const r = await fetch(`${BACKEND_URL}/api/family/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ members: cleaned }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.detail || 'Erreur lors de la sauvegarde');
+      }
+      await refreshUser();
+      setMembersMsg({ type: 'ok', text: 'Prénoms enregistrés' });
+      // Ensure the field shows at least one empty input if list is empty
+      if (cleaned.length === 0) setMembers(['']);
+      else setMembers(cleaned);
+    } catch (e: any) {
+      setMembersMsg({ type: 'err', text: e?.message || 'Erreur inconnue' });
+    } finally {
+      setIsSavingMembers(false);
+      setTimeout(() => setMembersMsg(null), 3500);
+    }
+  };
 
   const handleLogoutPress = () => {
     setShowLogoutModal(true);
@@ -101,6 +156,78 @@ export default function ProfileScreen() {
                 <Text style={styles.infoValue}>{user.children_ages.join(', ')} ans</Text>
               </View>
             )}
+          </View>
+        </View>
+
+        {/* Équipe type — Members editor */}
+        <View style={styles.section}>
+          <View style={styles.membersHeader}>
+            <Text style={styles.sectionTitle}>Équipe type</Text>
+            <Ionicons name="people-circle" size={24} color={colors.primary} />
+          </View>
+          <Text style={styles.membersHint}>
+            Ajoutez les prénoms des membres de la famille. Ils apparaîtront sur le Mur familial.
+          </Text>
+          <View style={styles.membersCard}>
+            {members.map((name, idx) => (
+              <View key={idx} style={styles.memberRow}>
+                <View style={styles.memberIndex}>
+                  <Text style={styles.memberIndexText}>{idx + 1}</Text>
+                </View>
+                <TextInput
+                  style={styles.memberInput}
+                  placeholder="Prénom"
+                  placeholderTextColor={colors.textSecondary}
+                  value={name}
+                  onChangeText={(v) => updateMember(idx, v)}
+                  autoCapitalize="words"
+                  returnKeyType="done"
+                  maxLength={30}
+                  testID={`member-input-${idx}`}
+                />
+                <TouchableOpacity
+                  onPress={() => removeMember(idx)}
+                  style={styles.memberRemoveBtn}
+                  disabled={members.length <= 1 && !name}
+                  testID={`member-remove-${idx}`}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={24}
+                    color={members.length <= 1 && !name ? colors.textSecondary : colors.error}
+                  />
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={styles.memberAddBtn}
+              onPress={addMember}
+              testID="member-add"
+            >
+              <Ionicons name="add-circle" size={20} color={colors.primary} />
+              <Text style={styles.memberAddBtnText}>Ajouter un prénom</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.memberSaveBtn, isSavingMembers && { opacity: 0.6 }]}
+              onPress={saveMembers}
+              disabled={isSavingMembers}
+              testID="member-save"
+            >
+              <Ionicons name="save" size={18} color={colors.textWhite} />
+              <Text style={styles.memberSaveBtnText}>
+                {isSavingMembers ? 'Sauvegarde...' : 'Enregistrer'}
+              </Text>
+            </TouchableOpacity>
+            {membersMsg ? (
+              <Text
+                style={[
+                  styles.membersMsg,
+                  { color: membersMsg.type === 'ok' ? colors.success : colors.error },
+                ]}
+              >
+                {membersMsg.text}
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -347,5 +474,88 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 24,
     marginBottom: 16,
+  },
+  membersHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  membersHint: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    marginBottom: 10,
+  },
+  membersCard: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 14,
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 8,
+  },
+  memberIndex: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  memberIndexText: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  memberInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.backgroundTertiary,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+    fontSize: 15,
+    color: colors.text,
+    backgroundColor: colors.background,
+  },
+  memberRemoveBtn: {
+    padding: 4,
+  },
+  memberAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  memberAddBtnText: {
+    color: colors.primary,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  memberSaveBtn: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  memberSaveBtnText: {
+    color: colors.textWhite,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  membersMsg: {
+    marginTop: 8,
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

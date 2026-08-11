@@ -69,6 +69,7 @@ class UserRegister(BaseModel):
     family_name: str
     nb_children: int
     children_ages: List[int]
+    members: Optional[List[str]] = None  # first names of family members (parents + kids)
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -224,12 +225,15 @@ async def register(user: UserRegister):
     
     # Create user
     hashed_password = get_password_hash(user.password)
+    # Sanitize members list (strip + drop empties)
+    members = [m.strip() for m in (user.members or []) if isinstance(m, str) and m.strip()]
     user_dict = {
         "email": user.email,
         "password": hashed_password,
         "family_name": user.family_name,
         "nb_children": user.nb_children,
         "children_ages": user.children_ages,
+        "members": members,
         "mopado_dollars": 0,
         "badges": [],
         "completed_episodes": [],
@@ -250,6 +254,7 @@ async def register(user: UserRegister):
             "family_name": user.family_name,
             "nb_children": user.nb_children,
             "children_ages": user.children_ages,
+            "members": members,
             "mopado_dollars": 0,
             "badges": [],
             "completed_episodes": []
@@ -273,6 +278,7 @@ async def login(user: UserLogin):
             "family_name": db_user["family_name"],
             "nb_children": db_user["nb_children"],
             "children_ages": db_user["children_ages"],
+            "members": db_user.get("members", []),
             "mopado_dollars": db_user.get("mopado_dollars", 0),
             "badges": db_user.get("badges", []),
             "completed_episodes": db_user.get("completed_episodes", [])
@@ -305,6 +311,7 @@ async def get_family_profile(user_id: str):
             "family_name": user["family_name"],
             "nb_children": user["nb_children"],
             "children_ages": user["children_ages"],
+            "members": user.get("members", []),
             "mopado_dollars": user.get("mopado_dollars", 0),
             "badges": user.get("badges", []),
             "completed_episodes": user.get("completed_episodes", [])
@@ -322,6 +329,10 @@ async def update_family_profile(user_id: str, profile: dict):
             update_data["nb_children"] = profile["nb_children"]
         if "children_ages" in profile:
             update_data["children_ages"] = profile["children_ages"]
+        if "members" in profile:
+            # sanitize members
+            raw = profile["members"] or []
+            update_data["members"] = [m.strip() for m in raw if isinstance(m, str) and m.strip()]
         
         await db.users.update_one(
             {"_id": ObjectId(user_id)},
