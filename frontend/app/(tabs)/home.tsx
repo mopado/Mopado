@@ -298,43 +298,6 @@ export default function HomeScreen() {
           </TouchableOpacity>
         ) : null}
 
-        {/* Weekly Word (Le mot de la semaine) */}
-        {weeklyWord && weeklyWord.text ? (
-          <TouchableOpacity
-            style={styles.weeklyWordCard}
-            onPress={() => setWeeklyWordRevealed((v) => !v)}
-            activeOpacity={0.85}
-            testID="weekly-word-card"
-          >
-            <View style={styles.weeklyWordHeader}>
-              <View style={styles.weeklyWordIconWrap}>
-                <Ionicons name="sparkles" size={20} color={colors.textWhite} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.weeklyWordTitle}>Le mot de la semaine</Text>
-                <Text style={styles.weeklyWordCategory}>
-                  {categoryLabel(weeklyWord.category)}
-                </Text>
-              </View>
-              <Ionicons
-                name={weeklyWordRevealed ? 'chevron-up' : 'chevron-down'}
-                size={22}
-                color={colors.primary}
-              />
-            </View>
-            {weeklyWordRevealed ? (
-              <View style={styles.weeklyWordBody}>
-                <Text style={styles.weeklyWordText}>« {weeklyWord.text} »</Text>
-                {weeklyWord.author ? (
-                  <Text style={styles.weeklyWordAuthor}>— {weeklyWord.author}</Text>
-                ) : null}
-              </View>
-            ) : (
-              <Text style={styles.weeklyWordTeaser}>Touchez pour découvrir</Text>
-            )}
-          </TouchableOpacity>
-        ) : null}
-
         {/* Planning card (next Mopado session) */}
         {(planning || !currentEpisode) && (
           <View style={styles.planningCard} testID="planning-card">
@@ -380,6 +343,43 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Weekly Word (Le mot de la semaine) */}
+        {weeklyWord && weeklyWord.text ? (
+          <TouchableOpacity
+            style={styles.weeklyWordCard}
+            onPress={() => setWeeklyWordRevealed((v) => !v)}
+            activeOpacity={0.85}
+            testID="weekly-word-card"
+          >
+            <View style={styles.weeklyWordHeader}>
+              <View style={styles.weeklyWordIconWrap}>
+                <Ionicons name="sparkles" size={20} color={colors.textWhite} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.weeklyWordTitle}>Le mot de la semaine</Text>
+                <Text style={styles.weeklyWordCategory}>
+                  {categoryLabel(weeklyWord.category)}
+                </Text>
+              </View>
+              <Ionicons
+                name={weeklyWordRevealed ? 'chevron-up' : 'chevron-down'}
+                size={22}
+                color={colors.primary}
+              />
+            </View>
+            {weeklyWordRevealed ? (
+              <View style={styles.weeklyWordBody}>
+                <Text style={styles.weeklyWordText}>« {weeklyWord.text} »</Text>
+                {weeklyWord.author ? (
+                  <Text style={styles.weeklyWordAuthor}>— {weeklyWord.author}</Text>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={styles.weeklyWordTeaser}>Touchez pour découvrir</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
 
         {/* Progress Summary */}
         <View style={styles.progressSection}>
